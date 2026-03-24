@@ -39,7 +39,7 @@ object ApiService {
     }
 
     fun sendMessage(from: String, to: String, text: String) {
-        val body = """{"from_ss":"$from","to_ss":"$to","text":"$text"}"""
+        val body = """{"text":"$text","target":"$to","from_ss":"$from"}"""
         val req = Request.Builder().url("$BASE/message")
             .post(body.toRequestBody(JSON)).build()
         client.newCall(req).execute().close()
