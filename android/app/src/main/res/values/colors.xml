@@ -1,15 +1,16 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <color name="bg_dark">#03071e</color>
-    <color name="bg_header">#0d1f3c</color>
-    <color name="bg_card">#1a2744</color>
-    <color name="accent">#ff6d00</color>
-    <color name="accent_dim">#a64800</color>
-    <color name="white">#d1d5db</color>
-    <color name="text_h">#f1f5f9</color>
-    <color name="text_muted">#78909c</color>
+    <!-- Matrix / Pager 90s theme -->
+    <color name="bg_dark">#0a0a0a</color>
+    <color name="bg_header">#001a00</color>
+    <color name="bg_card">#0d1a0d</color>
+    <color name="accent">#00ff00</color>
+    <color name="accent_dim">#00aa00</color>
+    <color name="white">#00ff00</color>
+    <color name="text_h">#00ff00</color>
+    <color name="text_muted">#00aa00</color>
     <color name="badge_off">#333333</color>
-    <color name="badge_on">#ff6d00</color>
-    <color name="smtp_ok">#4caf50</color>
-    <color name="smtp_err">#ff5252</color>
+    <color name="badge_on">#00ff00</color>
+    <color name="smtp_ok">#00ff00</color>
+    <color name="smtp_err">#ff3333</color>
 </resources>

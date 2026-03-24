@@ -76,8 +76,18 @@
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
-                android:textColor="#78909c"
-                android:textSize="12sp" />
+                android:textColor="#00ff00"
+                android:textSize="12sp"
+                android:fontFamily="monospace" />
+
+            <Button
+                android:id="@+id/btnLogout"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="🔴 EXIT"
+                android:textSize="12sp"
+                android:textColor="#ff4444"
+                style="?android:attr/borderlessButtonStyle" />
 
             <Button
                 android:id="@+id/btnRefresh"

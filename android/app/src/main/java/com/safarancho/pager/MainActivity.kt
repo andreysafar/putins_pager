@@ -80,6 +80,20 @@ class MainActivity : AppCompatActivity() {
             refreshContacts()
             Toast.makeText(this, "SCANNING...", Toast.LENGTH_SHORT).show()
         }
+
+        // LOGOUT / SWITCH SSID button
+        binding.btnLogout.setOnClickListener {
+            android.app.AlertDialog.Builder(this)
+                .setTitle("SWITCH SSID")
+                .setMessage("Clear current identity and register new one?")
+                .setPositiveButton("YES") { _, _ ->
+                    prefs.edit().remove("ss_id").apply()
+                    showRegisterView()
+                    Toast.makeText(this, "SSID cleared", Toast.LENGTH_SHORT).show()
+                }
+                .setNegativeButton("NO", null)
+                .show()
+        }
     }
 
     private fun doRegister(name: String, displayName: String) {
