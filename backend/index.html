@@ -3,117 +3,217 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>PAGER v6.3 | ANONYMOUS MODE</title>
+    <title>PAGER v6.5 | MESH NETWORK</title>
     <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700;800&display=swap" rel="stylesheet">
     <style>
-        :root { --bg: #050a14; --neon: #ff6d00; --text: #e2e8f0; --dim: #64748b; }
+        :root { --bg: #050a14; --neon: #ff6d00; --text: #e2e8f0; --dim: #64748b; --card: #0f172a; }
         * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'JetBrains Mono', monospace; }
         body { background: var(--bg); color: var(--text); display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
-        header { padding: 15px; background: #000; border-bottom: 2px solid var(--neon); display: flex; justify-content: space-between; align-items: center; }
-        h1 { font-size: 1.1rem; color: var(--neon); }
-        #lamp { width: 14px; height: 14px; border-radius: 50%; background: #222; }
+        header { padding: 12px 15px; background: #000; border-bottom: 2px solid var(--neon); display: flex; justify-content: space-between; align-items: center; }
+        h1 { font-size: 1rem; color: var(--neon); }
+        .header-info { font-size: 0.5rem; color: var(--dim); }
+        #lamp { width: 14px; height: 14px; border-radius: 50%; background: #222; transition: all 0.3s; }
         #lamp.active { background: var(--neon); box-shadow: 0 0 15px var(--neon); animation: pulse 0.8s infinite alternate; }
         @keyframes pulse { from { opacity: 1; } to { opacity: 0.5; } }
-        #contacts-panel { background: #000; border-bottom: 1px solid #1e293b; padding: 10px; display: flex; gap: 10px; overflow-x: auto; min-height: 50px; align-items: center; }
-        .contact-card { background: #0f172a; border: 1px solid #333; padding: 8px 15px; border-radius: 6px; font-size: 0.75rem; white-space: nowrap; cursor: pointer; color: var(--neon); }
+        
+        #mesh-status { background: #0a0f1a; border-bottom: 1px solid #1e293b; padding: 6px 15px; font-size: 0.55rem; color: var(--dim); display: flex; gap: 15px; }
+        .status-item { display: flex; align-items: center; gap: 4px; }
+        .status-dot { width: 6px; height: 6px; border-radius: 50%; }
+        .dot-green { background: #4caf50; box-shadow: 0 0 4px #4caf50; }
+        .dot-orange { background: var(--neon); }
+        .dot-red { background: #ff5252; }
+        
+        #contacts-panel { background: #000; border-bottom: 1px solid #1e293b; padding: 10px; display: flex; gap: 8px; overflow-x: auto; min-height: 55px; align-items: center; flex-wrap: nowrap; }
+        .contact-card { background: var(--card); border: 1px solid #333; padding: 8px 14px; border-radius: 6px; font-size: 0.7rem; white-space: nowrap; cursor: pointer; color: var(--neon); transition: all 0.2s; flex-shrink: 0; }
+        .contact-card:hover { border-color: var(--neon); box-shadow: 0 0 8px rgba(255,109,0,0.3); }
+        .contact-card .ssid { font-size: 0.5rem; color: var(--dim); margin-top: 2px; }
+        
         main { flex: 1; overflow-y: auto; padding: 15px; display: flex; flex-direction: column-reverse; gap: 10px; }
-        .msg { background: #0f172a; padding: 12px; border-radius: 8px; border-left: 3px solid var(--dim); font-size: 0.85rem; }
+        .msg { background: var(--card); padding: 12px; border-radius: 8px; border-left: 3px solid var(--dim); font-size: 0.85rem; }
         .msg.inbound { border-left-color: var(--neon); }
-        footer { padding: 15px; background: #000; display: flex; flex-direction: column; gap: 8px; border-top: 1px solid #1e293b; }
+        .msg .meta { font-size: 0.55rem; color: var(--dim); margin-bottom: 4px; }
+        
+        footer { padding: 12px 15px; background: #000; border-top: 1px solid #1e293b; display: flex; flex-direction: column; gap: 8px; }
         .input-group { display: flex; gap: 8px; }
-        input { background: #111; border: 1px solid #333; color: #fff; padding: 12px; border-radius: 6px; outline: none; flex: 1; }
-        button { background: var(--neon); color: #000; border: none; padding: 12px 20px; border-radius: 6px; font-weight: 800; cursor: pointer; }
-        .reg-box { background: #1e293b; padding: 20px; text-align: center; border-radius: 10px; margin: 10px; }
+        input { background: #111; border: 1px solid #333; color: #fff; padding: 10px 12px; border-radius: 6px; outline: none; flex: 1; font-size: 0.8rem; font-family: 'JetBrains Mono', monospace; }
+        input:focus { border-color: var(--neon); }
+        button { background: var(--neon); color: #000; border: none; padding: 10px 18px; border-radius: 4px; font-weight: 800; cursor: pointer; text-transform: uppercase; font-family: 'JetBrains Mono', monospace; font-size: 0.8rem; transition: all 0.2s; }
+        button:hover { box-shadow: 0 0 12px rgba(255,109,0,0.5); }
+        .btn-small { padding: 5px 10px !important; font-size: 0.55rem !important; background: #222 !important; color: #ff5252 !important; }
+        
+        #reg-box { background: #1e293b; padding: 30px; border-radius: 12px; margin: 20% 15px; text-align: center; box-shadow: 0 0 30px rgba(0,0,0,0.8); border: 1px solid #333; }
+        #reg-box h2 { color: var(--neon); margin-bottom: 8px; font-size: 1.2rem; }
+        #reg-box p { font-size: 0.75rem; color: var(--text); margin-bottom: 20px; }
+        #reg-box .sub { font-size: 0.55rem; color: var(--dim); margin-top: 15px; }
+        
+        .empty-contacts { color: var(--dim); font-size: 0.6rem; padding: 10px; text-align: center; }
+        .loading { animation: blink 1s infinite; }
+        @keyframes blink { 50% { opacity: 0.3; } }
     </style>
 </head>
 <body>
-    <div id="reg-overlay" class="reg-box" style="display:none">
-        <h2 style="color:var(--neon); margin-bottom:10px">ВХОД АНОНИМНО</h2>
-        <p style="font-size:0.8rem; margin-bottom:15px">У вас нет SSID. Сгенерировать временный ID для связи?</p>
-        <button onclick="registerAnon()">ПОЛУЧИТЬ SSID</button>
+    <div id="reg-box" style="display:none">
+        <h2>📟 PAGER v6.5</h2>
+        <p>ANONYMOUS MESH NETWORK ENTRY<br>Генерация временного SSID для связи</p>
+        <button onclick="registerAnon()">⚡ ACQUIRE SSID</button>
+        <div class="sub">SPORTS-PUNK EDITION 🦾⚙️</div>
     </div>
 
-    <div id="app-ui" style="display:none; height:100vh; flex-direction:column">
+    <div id="app-ui" style="display:none; flex-direction:column; height:100vh">
         <header>
-            <div><h1>PAGER v6.3</h1><div id="my-id-display" style="font-size:0.55rem; color:var(--dim)">ID: LOADING...</div></div>
+            <div>
+                <h1>📟 PAGER v6.5</h1>
+                <div class="header-info" id="my-id">OWNER: LOADING...</div>
+            </div>
             <div id="lamp"></div>
         </header>
-        <div id="contacts-panel"><span style="color:var(--dim); font-size:0.65rem">SCANNING ATHLETES...</span></div>
+        
+        <div id="mesh-status">
+            <div class="status-item"><div class="status-dot dot-green"></div> <span id="mesh-node">NODE: ---</span></div>
+            <div class="status-item"><div class="status-dot dot-orange" id="mesh-peer-dot"></div> <span id="mesh-peers">PEERS: 0</span></div>
+            <div class="status-item"><span id="mesh-routes">ROUTES: 0</span></div>
+        </div>
+        
+        <div id="contacts-panel">
+            <span class="empty-contacts loading">⏳ LOADING CONTACTS...</span>
+        </div>
+        
         <main id="messages"></main>
+        
         <footer>
-            <div class="input-group"><input type="text" id="target" placeholder="TARGET SSID"></div>
-            <input type="text" id="payload" placeholder="MESSAGE...">
-            <button onclick="send()">TRANSMIT</button>
+            <div class="input-group">
+                <input type="text" id="target" placeholder="TARGET SSID (ss-xxxx-pager)">
+            </div>
+            <input type="text" id="payload" placeholder="ENCRYPTED MESSAGE..." onkeydown="if(event.key==='Enter')send()">
+            <div class="input-group">
+                <button onclick="send()">📡 TRANSMIT</button>
+                <button class="btn-small" onclick="logout()">LOGOUT</button>
+                <button class="btn-small" onclick="loadContacts()" style="color:var(--neon)!important">↻ SCAN</button>
+            </div>
         </footer>
     </div>
 
     <script>
-        const lamp = document.getElementById('lamp');
         const msgs = document.getElementById('messages');
+        const lamp = document.getElementById('lamp');
         let mySsId = localStorage.getItem('pager_ss_id');
+        let ws = null;
 
         async function registerAnon() {
-            const res = await fetch('/register', { method: 'POST', body: JSON.stringify({label: 'web-anon'}), headers: {'Content-Type': 'application/json'} });
-            const data = await res.json();
-            if (data.ssid) {
-                mySsId = data.ssid;
-                localStorage.setItem('pager_ss_id', mySsId);
-                initApp();
+            const btn = event.target;
+            btn.disabled = true;
+            btn.textContent = 'SYNCING...';
+            try {
+                const res = await fetch('/register', {
+                    method: 'POST',
+                    body: JSON.stringify({label: 'web-anon'}),
+                    headers: {'Content-Type': 'application/json'}
+                });
+                const data = await res.json();
+                if (data.ssid || data.ss_id) {
+                    mySsId = data.ssid || data.ss_id;
+                    localStorage.setItem('pager_ss_id', mySsId);
+                    initApp();
+                }
+            } catch(e) {
+                btn.disabled = false;
+                btn.textContent = '⚡ RETRY';
             }
         }
 
         async function loadContacts() {
-            const res = await fetch('/api/athletes');
-            const athletes = await res.json();
             const panel = document.getElementById('contacts-panel');
-            panel.innerHTML = athletes.length ? '' : '<span style="color:var(--dim); font-size:0.65rem; padding-left:10px">NO DATA FROM neZhri</span>';
-            athletes.forEach(a => {
-                const card = document.createElement('div');
-                card.className = 'contact-card';
-                card.innerText = (a.first_name || a.username || a.name || 'ATHLETE').toUpperCase();
-                card.onclick = () => { document.getElementById('target').value = a.pager_ssid; };
-                panel.appendChild(card);
-            });
-        }
-
-        function initApp() {
-            document.getElementById('reg-overlay').style.display = 'none';
-            document.getElementById('app-ui').style.display = 'flex';
-            document.getElementById('my-id-display').innerText = `ID: ${mySsId}`;
-            connectWS();
-            loadContacts();
-        }
-
-        function connectWS() {
-            const ws = new WebSocket(`ws://${location.host}/ws/${mySsId}`);
-            ws.onmessage = (e) => {
-                const d = JSON.parse(e.data);
-                lamp.classList.add('active'); setTimeout(() => lamp.classList.remove('active'), 2500);
-                const div = document.createElement('div'); div.className = 'msg inbound';
-                div.innerHTML = `<div style="font-size:0.6rem; color:var(--dim)">${new Date().toLocaleTimeString()}</div>[INBOUND]: ${d.text}`;
-                msgs.prepend(div);
-            };
-        }
-
-        async function send() {
-            const text = document.getElementById('payload').value;
-            const target = document.getElementById('target').value;
-            if (!text || !target) return;
-            const res = await fetch('/message', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ text, target, from_ss: mySsId })
-            });
-            if (res.ok) {
-                const div = document.createElement('div'); div.className = 'msg';
-                div.innerHTML = `<div style="font-size:0.6rem; color:var(--dim)">${new Date().toLocaleTimeString()}</div>[SENT]: ${text}`;
-                msgs.prepend(div);
-                document.getElementById('payload').value = '';
+            panel.innerHTML = '<span class="empty-contacts loading">⏳ SCANNING MESH...</span>';
+            try {
+                const res = await fetch('/contacts');
+                const athletes = await res.json();
+                panel.innerHTML = '';
+                if (!athletes.length) {
+                    panel.innerHTML = '<span class="empty-contacts">NO CONTACTS FOUND — MESH EMPTY</span>';
+                    return;
+                }
+                athletes.forEach(a => {
+                    const card = document.createElement('div');
+                    card.className = 'contact-card';
+                    const name = (a.display_name || a.first_name || a.username || a.name || 'ATHLETE').toUpperCase();
+                    card.innerHTML = `${name}<div class="ssid">${a.ss_id}</div>`;
+                    card.onclick = () => {
+                        document.getElementById('target').value = a.ss_id;
+                        document.getElementById('payload').focus();
+                    };
+                    panel.appendChild(card);
+                });
+            } catch(e) {
+                panel.innerHTML = '<span class="empty-contacts">⚠ CONTACTS API OFFLINE</span>';
             }
         }
 
+        async function loadMeshStatus() {
+            try {
+                const res = await fetch('/mesh/status');
+                const status = await res.json();
+                document.getElementById('mesh-node').textContent = `NODE: ${status.node_id}`;
+                document.getElementById('mesh-peers').textContent = `PEERS: ${status.online_peers}/${status.total_peers}`;
+                document.getElementById('mesh-routes').textContent = `ROUTES: ${status.known_routes}`;
+                const dot = document.getElementById('mesh-peer-dot');
+                dot.className = 'status-dot ' + (status.online_peers > 0 ? 'dot-green' : 'dot-orange');
+            } catch(e) {}
+        }
+
+        function initApp() {
+            document.getElementById('reg-box').style.display = 'none';
+            document.getElementById('app-ui').style.display = 'flex';
+            document.getElementById('my-id').textContent = `ID: ${mySsId}`;
+            connectWS();
+            loadContacts();
+            loadMeshStatus();
+            setInterval(loadMeshStatus, 30000);
+        }
+
+        function connectWS() {
+            if (ws) ws.close();
+            ws = new WebSocket(`ws://${location.host}/ws/${mySsId}`);
+            ws.onmessage = (e) => {
+                const d = JSON.parse(e.data);
+                lamp.classList.add('active');
+                setTimeout(() => lamp.classList.remove('active'), 2500);
+                const div = document.createElement('div');
+                div.className = 'msg inbound';
+                div.innerHTML = `<div class="meta">[${new Date().toLocaleTimeString()}] FROM: ${d.from_ss || 'UNKNOWN'}</div>${d.text}`;
+                msgs.prepend(div);
+            };
+            ws.onclose = () => { setTimeout(connectWS, 5000); };
+            ws.onerror = () => { ws.close(); };
+        }
+
+        async function send() {
+            const text = document.getElementById('payload').value.trim();
+            const target = document.getElementById('target').value.trim();
+            if (!text || !target) return;
+            try {
+                const res = await fetch('/message', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ text, target, from_ss: mySsId })
+                });
+                if (res.ok) {
+                    const data = await res.json();
+                    const div = document.createElement('div');
+                    div.className = 'msg';
+                    div.innerHTML = `<div class="meta">[${new Date().toLocaleTimeString()}] TO: ${target} | ${data.route || 'sent'}</div>${text}`;
+                    msgs.prepend(div);
+                    document.getElementById('payload').value = '';
+                }
+            } catch(e) {}
+        }
+
+        function logout() {
+            localStorage.removeItem('pager_ss_id');
+            location.reload();
+        }
+
         if (mySsId) initApp();
-        else document.getElementById('reg-overlay').style.display = 'block';
+        else document.getElementById('reg-box').style.display = 'block';
     </script>
 </body>
 </html>

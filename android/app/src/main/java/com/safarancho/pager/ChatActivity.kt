@@ -23,9 +23,9 @@ class ChatActivity : AppCompatActivity() {
         binding = ActivityChatBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
-        mySS = getSharedPreferences("pager", MODE_PRIVATE).getString("ss_id", "")!!
+        mySS = getSharedPreferences("pager_prefs", MODE_PRIVATE).getString("ss_id", "")!!
         contactSS = intent.getStringExtra("contact_ss_id") ?: ""
-        contactName = intent.getStringExtra("contact_name") ?: ""
+        contactName = intent.getStringExtra("contact_name") ?: intent.getStringExtra("to_name") ?: ""
 
         // Clear notification for this contact
         NotificationHelper.clearNotification(this, contactSS)
