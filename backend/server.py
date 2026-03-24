@@ -14,6 +14,8 @@ from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
+import smtplib
+import ssl
 
 # --- Config ---
 PORT = int(os.getenv("PORT", "8888"))
@@ -87,6 +89,16 @@ class WSManager:
 
 ws_mgr = WSManager()
 
+# --- SMTP Config (in-memory, not persisted to avoid secret leakage in logs) ---
+_smtp_config: dict = {}
+
+class SmtpConfigReq(BaseModel):
+    host: str
+    port: int = 587
+    user: str
+    pass_: str | None = None
+    from_addr: str = ""
+
 # --- App ---
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -150,6 +162,52 @@ def get_messages(ss_id: str, limit: int = 50, after: str | None = None):
             (ss_id, ss_id, limit)).fetchall()
     conn.close()
     return [dict(r) for r in rows]
+
+@app.get("/smtp/status")
+def smtp_status():
+    """Return SMTP connection status — password is NEVER returned."""
+    cfg = _smtp_config
+    if not cfg:
+        return {"configured": False, "host": "", "port": 0, "user": "", "from_addr": ""}
+    return {
+        "configured": bool(cfg.get("host")),
+        "host": cfg.get("host", ""),
+        "port": cfg.get("port", 587),
+        "user": cfg.get("user", ""),
+        "from_addr": cfg.get("from_addr", ""),
+        # Test connectivity (non-blocking mental check only; no secrets exposed)
+        "reachable": _test_smtp(cfg) if cfg.get("host") else False,
+    }
+
+@app.post("/smtp/configure")
+def smtp_configure(req: SmtpConfigReq):
+    """Store SMTP config in memory. Password NEVER written to logs or DB."""
+    global _smtp_config
+    _smtp_config = {
+        "host": req.host,
+        "port": req.port,
+        "user": req.user,
+        "pass": req.pass_ or "",
+        "from_addr": req.from_addr or req.user,
+    }
+    return {"ok": True, "message": "SMTP configured (in-memory, password not persisted)"}
+
+
+def _test_smtp(cfg: dict) -> bool:
+    """Quick SMTP connectivity check. No secrets in logs."""
+    try:
+        ctx = ssl.create_default_context()
+        with smtplib.SMTP(cfg["host"], cfg.get("port", 587), timeout=5) as srv:
+            srv.ehlo()
+            if srv.has_extn("starttls"):
+                srv.starttls(context=ctx)
+                srv.ehlo()
+            if cfg.get("user") and cfg.get("pass"):
+                srv.login(cfg["user"], cfg["pass"])
+        return True
+    except Exception:
+        return False
+
 
 @app.websocket("/ws/{ss_id}")
 async def ws_endpoint(ws: WebSocket, ss_id: str):

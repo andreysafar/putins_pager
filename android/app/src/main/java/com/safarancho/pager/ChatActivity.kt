@@ -27,6 +27,9 @@ class ChatActivity : AppCompatActivity() {
         contactSS = intent.getStringExtra("contact_ss_id") ?: ""
         contactName = intent.getStringExtra("contact_name") ?: ""
 
+        // Clear notification for this contact
+        NotificationHelper.clearNotification(this, contactSS)
+
         binding.tvChatWith.text = contactName
         binding.rvMessages.layoutManager = LinearLayoutManager(this)
 
@@ -40,21 +43,34 @@ class ChatActivity : AppCompatActivity() {
     private fun connectWebSocket() {
         val wsUrl = BuildConfig.BASE_URL.replace("http", "ws") + "/ws/$mySS"
         ws = object : WebSocketClient(URI(wsUrl)) {
-            override fun onOpen(handshakedata: ServerHandshake?) {
-                // connected
-            }
+            override fun onOpen(handshakedata: ServerHandshake?) {}
             override fun onMessage(message: String?) {
                 message ?: return
-                runOnUiThread {
+                try {
                     val msg = ApiService.gson.fromJson(message, Message::class.java)
-                    if (msg.from_ss == contactSS) {
-                        messages.add(msg)
-                        binding.rvMessages.adapter?.notifyItemInserted(messages.size - 1)
-                        binding.rvMessages.scrollToPosition(messages.size - 1)
+                    if (msg.from_ss == mySS) return  // Skip own echoes
+
+                    runOnUiThread {
+                        if (msg.from_ss == contactSS) {
+                            // Message in current chat — display it
+                            messages.add(msg)
+                            binding.rvMessages.adapter?.notifyItemInserted(messages.size - 1)
+                            binding.rvMessages.scrollToPosition(messages.size - 1)
+                        } else {
+                            // Message from OTHER contact — show push notification
+                            // (don't disrupt current chat view)
+                            NotificationHelper.showMessageNotification(
+                                this@ChatActivity, msg.from_ss, msg.from_ss, msg.text
+                            )
+                        }
                     }
-                }
+                } catch (_: Exception) {}
             }
-            override fun onClose(code: Int, reason: String?, remote: Boolean) {}
+            override fun onClose(code: Int, reason: String?, remote: Boolean) {
+                android.os.Handler(mainLooper).postDelayed({
+                    if (!isFinishing) connectWebSocket()
+                }, 3000)
+            }
             override fun onError(ex: Exception?) {}
         }
         ws?.connect()
@@ -74,7 +90,7 @@ class ChatActivity : AppCompatActivity() {
                     binding.rvMessages.scrollToPosition(messages.size - 1)
                 }
             } catch (e: Exception) {
-                runOnUiThread { Toast.makeText(this, "Error: ${e.message}", Toast.LENGTH_SHORT).show() }
+                runOnUiThread { Toast.makeText(this, "Ошибка: ${e.message}", Toast.LENGTH_SHORT).show() }
             }
         }.start()
     }
@@ -87,12 +103,15 @@ class ChatActivity : AppCompatActivity() {
             try {
                 ApiService.sendMessage(mySS, contactSS, text)
                 runOnUiThread {
-                    val msg = Message(from_ss = mySS, to_ss = contactSS, text = text, created_at = java.time.Instant.now().toString())
+                    val msg = Message(
+                        from_ss = mySS, to_ss = contactSS,
+                        text = text, created_at = java.time.Instant.now().toString()
+                    )
                     messages.add(0, msg)
                     binding.rvMessages.adapter?.notifyItemInserted(0)
                 }
             } catch (e: Exception) {
-                runOnUiThread { Toast.makeText(this, "Error: ${e.message}", Toast.LENGTH_SHORT).show() }
+                runOnUiThread { Toast.makeText(this, "Ошибка: ${e.message}", Toast.LENGTH_SHORT).show() }
             }
         }.start()
     }

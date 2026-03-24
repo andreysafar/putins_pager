@@ -6,13 +6,15 @@
     android:background="@color/bg_dark">
 
     <TextView
+        android:id="@+id/tvHeaderTitle"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:text="🏊 Safarancho Pager"
         android:textColor="@color/accent"
         android:textSize="20sp"
         android:padding="16dp"
-        android:background="@color/bg_header" />
+        android:background="@color/bg_header"
+        android:fontFamily="monospace" />
 
     <!-- Register -->
     <LinearLayout
