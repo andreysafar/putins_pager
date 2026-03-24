@@ -67,7 +67,8 @@ class ChatActivity : AppCompatActivity() {
                             messages.add(msg)
                             binding.rvMessages.adapter?.notifyItemInserted(messages.size - 1)
                             binding.rvMessages.scrollToPosition(messages.size - 1)
-                        } else {
+                        } else if (!msg.from_ss.isNullOrEmpty()) {
+                            // Only show notification if from_ss is valid
                             NotificationHelper.showMessageNotification(
                                 this@ChatActivity, msg.from_ss, msg.from_ss, msg.text
                             )
