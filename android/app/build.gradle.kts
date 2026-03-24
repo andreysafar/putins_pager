@@ -13,13 +13,17 @@ android {
         targetSdk = 34
         versionCode = 1
         versionName = "1.0"
-        // Set your backend URL here or via BuildConfig
-        buildConfigField("String", "BASE_URL", "\"http://10.0.2.2:9009\"")
     }
     buildTypes {
+        // Debug: Android emulator -> host machine (backend on :9009).
+        debug {
+            buildConfigField("String", "BASE_URL", "\"http://10.0.2.2:9009\"")
+        }
+        // Release APK for a real phone: production host. Use .ru only — telegram.iron-siberia.com has NO DNS (UnknownHostException).
         release {
             isMinifyEnabled = false
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
+            buildConfigField("String", "BASE_URL", "\"https://telegram.iron-siberia.ru\"")
         }
     }
     compileOptions {
