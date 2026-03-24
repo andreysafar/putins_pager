@@ -119,6 +119,17 @@ class WSManager:
                 except:
                     self.disconnect(ss_id, ws)
 
+    async def kill_all(self):
+        """Close all active WebSocket connections."""
+        for ss_id, wss in list(self.connections.items()):
+            for ws in list(wss):
+                try:
+                    await ws.close(code=1001, reason="Server shutdown")
+                except:
+                    pass
+            self.connections.pop(ss_id, None)
+            self.last_ping.pop(ss_id, None)
+
 ws_mgr = WSManager()
 
 # --- Mesh Network State ---
@@ -293,12 +304,20 @@ async def presence_cleanup_loop():
     """Periodically clean stale presence entries and broadcast updates."""
     while True:
         await asyncio.sleep(60)
-        # Remove entries older than 10 minutes
-        cutoff = time.time() - 600
+        # Remove entries older than 5 minutes (zombie threshold)
+        cutoff = time.time() - 300
         to_remove = [sid for sid, ts in ws_mgr.last_ping.items() if ts < cutoff]
         for sid in to_remove:
             if sid not in ws_mgr.connections:
                 del ws_mgr.last_ping[sid]
+        if to_remove:
+            try:
+                await ws_mgr.broadcast({
+                    "type": "presence",
+                    "contacts": ws_mgr.get_all_presence()
+                })
+            except:
+                pass
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -321,6 +340,8 @@ async def lifespan(app: FastAPI):
             print(f"⚠️ Could not register to main node: {e}")
     
     yield
+    # Kill all active WebSocket sessions so they reconnect and get re-counted
+    await ws_mgr.kill_all()
     mesh_task.cancel()
     presence_task.cancel()
 
@@ -462,6 +483,15 @@ async def ws_endpoint(ws: WebSocket, ss_id: str):
             })
         except:
             pass
+    except Exception:
+        ws_mgr.disconnect(ss_id, ws)
+        try:
+            await ws_mgr.broadcast({
+                "type": "presence",
+                "contacts": ws_mgr.get_all_presence()
+            })
+        except:
+            pass
 
 # --- Mesh Endpoints ---
 
@@ -579,7 +609,7 @@ pip install -r requirements.txt
 if [ -n "$MAIN_NODE" ]; then
     export MAIN_NODE_URL="$MAIN_NODE"
     export NODE_URL="$NODE_URL"
-    echo "📡 Will register to main node: $MAIN_NODE"
+    echo "Will register to main node: $MAIN_NODE"
 fi
 
 echo "Starting Pager Node..."

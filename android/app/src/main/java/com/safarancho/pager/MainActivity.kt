@@ -178,6 +178,9 @@ class MainActivity : AppCompatActivity() {
                 if (pos in filteredList.indices) {
                     val contact = filteredList[pos]
                     hiddenContacts.add(contact.ss_id)
+                    // Clear unread messages for this contact from memory
+                    unreadMap.remove(contact.ss_id)
+                    contactsWithMessages.remove(contact.ss_id)
                     applyFilter()
                     Toast.makeText(this@MainActivity, "${contact.display_name} СКРЫТ", Toast.LENGTH_SHORT).show()
                 }
