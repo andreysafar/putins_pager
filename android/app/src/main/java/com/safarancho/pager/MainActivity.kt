@@ -34,6 +34,9 @@ class MainActivity : AppCompatActivity() {
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
+        // Create notification channel for Android 8+
+        NotificationHelper.createChannel(this)
+
         mySsId = prefs.getString("ss_id", null)
 
         if (mySsId != null) {

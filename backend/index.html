@@ -726,9 +726,11 @@
     <div class="reg-title">PAGER v7.0</div>
     <div class="reg-subtitle">
         ANONYMOUS MESH NETWORK<br>
-        Нажми для получения SSID
+        Введи имя и получи SSID
     </div>
-    <button class="reg-btn" onclick="registerAnon()">⚡ ACQUIRE SSID</button>
+    <input type="text" id="reg-name" placeholder="Твое имя (никнейм)" style="width:80%;padding:10px;margin-bottom:10px;background:#0d1a0d;border:1px solid #00ff00;color:#00ff00;font-family:monospace;text-align:center;">
+    <input type="text" id="reg-display" placeholder="Отображаемое имя" style="width:80%;padding:10px;margin-bottom:15px;background:#0d1a0d;border:1px solid #00ff00;color:#00ff00;font-family:monospace;text-align:center;">
+    <button class="reg-btn" onclick="registerAnon()">⚡ ПОЛУЧИТЬ SSID</button>
     <div class="reg-footer">SPORTS-PUNK EDITION 🦾⚙️</div>
 </div>
 
@@ -851,12 +853,17 @@
     // ========== REGISTRATION ==========
     async function registerAnon() {
         const btn = event.target;
+        const nameInput = document.getElementById('reg-name');
+        const displayInput = document.getElementById('reg-display');
+        const name = (nameInput?.value || '').trim() || 'anon';
+        const display = (displayInput?.value || '').trim() || name;
+        
         btn.disabled = true;
         btn.textContent = 'SYNCING...';
         try {
             const res = await fetch('/register', {
                 method: 'POST',
-                body: JSON.stringify({label: 'web-anon'}),
+                body: JSON.stringify({name: name, label: display}),
                 headers: {'Content-Type': 'application/json'}
             });
             const data = await res.json();
