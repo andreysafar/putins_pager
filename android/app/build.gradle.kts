@@ -14,7 +14,7 @@ android {
         versionCode = 1
         versionName = "1.0"
         // Set your backend URL here or via BuildConfig
-        buildConfigField("String", "BASE_URL", "\"http://10.0.2.2:8888\"")
+        buildConfigField("String", "BASE_URL", "\"http://10.0.2.2:9009\"")
     }
     buildTypes {
         release {
