@@ -12,12 +12,14 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
 # --- Config ---
 PORT = int(os.getenv("PORT", "8888"))
 DB_PATH = os.getenv("DB_PATH", "pager.db")
 CORS_ORIGINS = os.getenv("CORS_ORIGINS", "*").split(",")
+BASE_DIR = Path(__file__).resolve().parent
 
 # --- DB ---
 def get_db():
@@ -94,6 +96,11 @@ async def lifespan(app: FastAPI):
 app = FastAPI(title="Safarancho Pager", lifespan=lifespan)
 app.add_middleware(CORSMiddleware, allow_origins=CORS_ORIGINS,
                    allow_methods=["*"], allow_headers=["*"])
+
+@app.get("/")
+def serve_index():
+    return FileResponse(BASE_DIR / "index.html")
+
 
 @app.get("/health")
 def health():
