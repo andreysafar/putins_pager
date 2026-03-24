@@ -214,6 +214,6 @@ class MainActivity : AppCompatActivity() {
 
     override fun onDestroy() {
         super.onDestroy()
-        ws?.close()
+        ws?.close(1000, "User closed app")
     }
 }
