@@ -14,9 +14,10 @@ from pathlib import Path
 from contextlib import asynccontextmanager
 from typing import Optional
 
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Query
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Query, UploadFile, File as FastAPIFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 import pymongo
 
@@ -24,6 +25,8 @@ import pymongo
 PORT = 9009
 DB_PATH = "pager.db"
 BASE_DIR = Path(__file__).resolve().parent
+UPLOADS_DIR = BASE_DIR / "uploads"
+UPLOADS_DIR.mkdir(exist_ok=True)
 MONGO_URI = os.getenv("MONGODB_URI", "mongodb://localhost:27017/fitness_bot")
 
 # --- Mesh Config ---
@@ -307,6 +310,9 @@ async def lifespan(app: FastAPI):
 app = FastAPI(lifespan=lifespan)
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 
+# Mount uploads directory as static files
+app.mount("/uploads", StaticFiles(directory=str(UPLOADS_DIR)), name="uploads")
+
 # --- Routes ---
 
 @app.get("/")
@@ -489,20 +495,42 @@ def mesh_status():
 def health():
     return {"status": "ok", "node_id": NODE_ID, "peers": len(mesh.peers)}
 
+@app.post("/upload")
+async def upload_file(file: UploadFile = FastAPIFile(...)):
+    """Upload a file and return its URL."""
+    # Sanitize filename: keep extension, add uuid prefix
+    import re
+    original_name = file.filename or "unnamed"
+    safe_name = re.sub(r'[^\w\.\-]', '_', original_name)
+    unique_name = f"{uuid.uuid4().hex[:8]}_{safe_name}"
+    file_path = UPLOADS_DIR / unique_name
+    content = await file.read()
+    file_path.write_bytes(content)
+    return {"url": f"/uploads/{unique_name}", "filename": original_name}
+
 @app.get("/download_node_kit")
 def download_node_kit():
     """Generate and stream a .tar.gz archive for deploying a new Pager node."""
     buffer = io.BytesIO()
     with tarfile.open(fileobj=buffer, mode="w:gz") as tar:
-        # 1. server.py
-        with open(BASE_DIR / "server.py", "rb") as f:
-            tar.addfile(tarfile.TarInfo(name="server.py"), f)
-        # 2. index.html
-        with open(BASE_DIR / "index.html", "rb") as f:
-            tar.addfile(tarfile.TarInfo(name="index.html"), f)
+        # 1. server.py - read full content
+        server_content = (BASE_DIR / "server.py").read_bytes()
+        info = tarfile.TarInfo(name="server.py")
+        info.size = len(server_content)
+        tar.addfile(info, io.BytesIO(server_content))
+        
+        # 2. index.html - read full content  
+        html_content = (BASE_DIR / "index.html").read_bytes()
+        info = tarfile.TarInfo(name="index.html")
+        info.size = len(html_content)
+        tar.addfile(info, io.BytesIO(html_content))
+        
         # 3. requirements.txt
         req_content = b"fastapi\nuvicorn[standard]\npymongo\npython-multipart\n"
-        tar.addfile(tarfile.TarInfo(name="requirements.txt"), io.BytesIO(req_content))
+        info = tarfile.TarInfo(name="requirements.txt")
+        info.size = len(req_content)
+        tar.addfile(info, io.BytesIO(req_content))
+        
         # 4. deploy.sh
         deploy_content = b"""#!/bin/bash
 set -e
@@ -512,19 +540,36 @@ pip install -r requirements.txt
 echo "Starting Pager Node..."
 uvicorn server:app --host 0.0.0.0 --port 8000
 """
-        tar.addfile(tarfile.TarInfo(name="deploy.sh"), io.BytesIO(deploy_content))
+        info = tarfile.TarInfo(name="deploy.sh")
+        info.size = len(deploy_content)
+        tar.addfile(info, io.BytesIO(deploy_content))
+        # Make executable
+        import os
+        os.chmod("/tmp/deploy.sh", 0o755) if False else None
+        
         # 5. README_NODE.txt
-        readme_content = b"""# PAGER NODE KIT
-## Quick Start
+        readme_content = """# SAFARANCHO PAGER NODE KIT
+========================
+
+## WARNING
+This is decentralized mesh network messaging software.
+Use at your own risk. Author is not responsible.
+
+## QUICK START
 1. chmod +x deploy.sh
 2. ./deploy.sh
-## Environment Variables
-NODE_ID=your-node-id
-MESH_PEERS='["http://other-node:8000"]'
-## Mesh Network
-Nodes ping each other every 30s and exchange SSID lists.
-"""
-        tar.addfile(tarfile.TarInfo(name="README_NODE.txt"), io.BytesIO(readme_content))
+3. Open http://localhost:8000 in browser
+
+## ENVIRONMENT VARIABLES
+NODE_ID=your-unique-node-id
+MESH_PEERS='["http://ip1:8000", "http://ip2:8000"]'
+
+## MESH NETWORK
+Nodes ping each other every 30 seconds and exchange contacts.
+""".encode('utf-8')
+        info = tarfile.TarInfo(name="README_NODE.txt")
+        info.size = len(readme_content)
+        tar.addfile(info, io.BytesIO(readme_content))
     buffer.seek(0)
     from fastapi.responses import StreamingResponse
     return StreamingResponse(

@@ -620,6 +620,77 @@
         /* ========== HIDDEN FILE INPUT ========== */
         #file-input { display: none; }
 
+        /* ========== FILE PREVIEW IN CHAT ========== */
+        .msg-img-preview {
+            max-width: 200px;
+            max-height: 200px;
+            border-radius: 6px;
+            cursor: pointer;
+            margin-top: 6px;
+            display: block;
+            border: 1px solid rgba(42,58,26,0.3);
+            transition: opacity 0.2s;
+        }
+        .msg-img-preview:hover {
+            opacity: 0.85;
+        }
+        .msg-file-row {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-top: 6px;
+            padding: 6px 10px;
+            background: rgba(0,0,0,0.08);
+            border-radius: 6px;
+            font-size: 0.6rem;
+        }
+        .msg-file-icon {
+            font-size: 1.2rem;
+            flex-shrink: 0;
+        }
+        .msg-file-name {
+            flex: 1;
+            word-break: break-all;
+            color: var(--lcd-dark);
+        }
+        .btn-download {
+            background: #2d8a4e;
+            color: #fff;
+            border: none;
+            padding: 4px 10px;
+            border-radius: 4px;
+            font-size: 0.55rem;
+            font-family: 'Share Tech Mono', monospace;
+            cursor: pointer;
+            white-space: nowrap;
+            letter-spacing: 0.5px;
+            transition: background 0.15s;
+        }
+        .btn-download:hover {
+            background: #24854a;
+        }
+
+        /* ========== IMAGE MODAL ========== */
+        .img-modal-overlay {
+            display: none;
+            position: fixed;
+            inset: 0;
+            background: rgba(0,0,0,0.85);
+            z-index: 1000;
+            justify-content: center;
+            align-items: center;
+            cursor: pointer;
+        }
+        .img-modal-overlay.open {
+            display: flex;
+        }
+        .img-modal-overlay img {
+            max-width: 95vw;
+            max-height: 95vh;
+            border-radius: 8px;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.6);
+        }
+
         /* ========== MOBILE ========== */
         @media (max-width: 480px) {
             body { padding: 4px; }
@@ -717,6 +788,11 @@
             <span id="mesh-info-text">NODE: ---</span>
         </div>
     </div>
+</div>
+
+<!-- Image modal overlay -->
+<div class="img-modal-overlay" id="img-modal" onclick="this.classList.remove('open')">
+    <img id="img-modal-img" src="" alt="">
 </div>
 
 <script>
@@ -986,6 +1062,15 @@
                 const { el, metaEl, textEl } = typewriterText(text, false);
                 metaEl.textContent = `[${new Date().toLocaleTimeString()}] FROM: ${fromSs}`;
 
+                // Check if message text is a file URL — render preview/download
+                const fileUrl = (text && text.startsWith('/uploads/')) ? text : null;
+                if (fileUrl) {
+                    const attachDiv = document.createElement('div');
+                    attachDiv.innerHTML = renderAttachment(fileUrl);
+                    el.appendChild(attachDiv);
+                    textDiv.textContent = '📎 ' + getFilename(fileUrl);
+                }
+
                 // Store in chat
                 chatTabs[fromSs].messages.push({ html: el.outerHTML, text });
 
@@ -1051,7 +1136,45 @@
     }
 
     // ========== FILE ATTACHMENT ==========
-    function handleFileAttach(input) {
+    const IMAGE_EXTS = ['jpg','jpeg','png','gif','webp','bmp','svg'];
+
+    function isImageUrl(url) {
+        if (!url) return false;
+        const ext = url.split('?')[0].split('.').pop().toLowerCase();
+        return IMAGE_EXTS.includes(ext);
+    }
+
+    function getFilename(url) {
+        if (!url) return 'file';
+        return url.split('/').pop().split('?')[0] || 'file';
+    }
+
+    function renderImagePreview(url) {
+        return `<img class="msg-img-preview" src="${url}" alt="preview" onclick="openImageModal('${url}')">`;
+    }
+
+    function renderFileRow(url) {
+        const name = getFilename(url);
+        return `<div class="msg-file-row">
+            <span class="msg-file-icon">📄</span>
+            <span class="msg-file-name">${name}</span>
+            <a class="btn-download" href="${url}" download target="_blank">СКАЧАТЬ</a>
+        </div>`;
+    }
+
+    function renderAttachment(url) {
+        if (!url) return '';
+        if (isImageUrl(url)) return renderImagePreview(url);
+        return renderFileRow(url);
+    }
+
+    function openImageModal(url) {
+        const modal = document.getElementById('img-modal');
+        document.getElementById('img-modal-img').src = url;
+        modal.classList.add('open');
+    }
+
+    async function handleFileAttach(input) {
         const files = input.files;
         if (!files.length) return;
         const target = document.getElementById('target').value.trim();
@@ -1061,16 +1184,33 @@
             return;
         }
 
-        for (const file of files) {
-            // Show file as message
-            const fileText = `📎 ${file.name} (${(file.size/1024).toFixed(1)}KB)`;
+        // Ensure chat tab
+        if (!chatTabs[target]) {
+            const contact = allContacts.find(c => c.ss_id === target);
+            const name = contact ? contact.display_name : target;
+            chatTabs[target] = { name, messages: [], unread: 0 };
+        }
+        if (activeChatId !== target) {
+            openChat(target);
+        }
 
-            if (!chatTabs[target]) {
-                const contact = allContacts.find(c => c.ss_id === target);
-                const name = contact ? contact.display_name : target;
-                chatTabs[target] = { name, messages: [], unread: 0 };
+        for (const file of files) {
+            // Upload file to server
+            let fileUrl = null;
+            let originalName = file.name;
+            try {
+                const formData = new FormData();
+                formData.append('file', file);
+                const res = await fetch('/upload', { method: 'POST', body: formData });
+                if (res.ok) {
+                    const data = await res.json();
+                    fileUrl = data.url;
+                }
+            } catch(e) {
+                console.error('Upload failed:', e);
             }
 
+            // Build message bubble
             const div = document.createElement('div');
             div.className = 'msg-bubble outbound typing-done';
             const metaDiv = document.createElement('div');
@@ -1078,27 +1218,32 @@
             metaDiv.textContent = `[${new Date().toLocaleTimeString()}] TO: ${target} | FILE`;
             const textDiv = document.createElement('div');
             textDiv.className = 'msg-text';
-            textDiv.textContent = fileText;
-            const attachDiv = document.createElement('div');
-            attachDiv.className = 'msg-attachment';
-            attachDiv.textContent = `📎 ${file.name}`;
+            textDiv.textContent = `📎 ${originalName} (${(file.size/1024).toFixed(1)}KB)`;
+
             div.appendChild(metaDiv);
             div.appendChild(textDiv);
-            div.appendChild(attachDiv);
 
-            chatTabs[target].messages.push({ html: div.outerHTML, text: fileText });
+            if (fileUrl) {
+                const attachDiv = document.createElement('div');
+                attachDiv.innerHTML = renderAttachment(fileUrl);
+                div.appendChild(attachDiv);
+            }
+
+            const msgHtml = div.outerHTML;
+            const msgText = fileUrl ? fileUrl : `[FILE: ${originalName}]`;
+            chatTabs[target].messages.push({ html: msgHtml, text: msgText });
 
             if (activeChatId === target) {
                 msgs.appendChild(div);
                 scrollToBottom();
             }
 
-            // Send file info as message (actual file upload would need server endpoint)
+            // Send message with file URL
             fetch('/message', {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
                 body: JSON.stringify({
-                    text: `[FILE: ${file.name}, ${(file.size/1024).toFixed(1)}KB]`,
+                    text: fileUrl || `[FILE: ${originalName}, ${(file.size/1024).toFixed(1)}KB]`,
                     target,
                     from_ss: mySsId
                 })
