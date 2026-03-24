@@ -32,6 +32,7 @@ MONGO_URI = os.getenv("MONGODB_URI", "mongodb://localhost:27017/fitness_bot")
 # --- Mesh Config ---
 # Neighbor nodes: list of base URLs this node can reach for mesh routing
 MESH_PEERS = json.loads(os.getenv("MESH_PEERS", "[]"))  # e.g. ["http://10.0.0.2:9009","http://10.0.0.3:9009"]
+MAIN_NODE_URL = os.getenv("MAIN_NODE_URL", "")  # URL главной ноды для авто-регистрации
 NODE_ID = os.getenv("NODE_ID", f"node-{secrets.token_hex(3)}")
 MESH_PING_INTERVAL = 30  # seconds
 
@@ -303,6 +304,21 @@ async def lifespan(app: FastAPI):
     init_db()
     mesh_task = asyncio.create_task(mesh_ping_loop())
     presence_task = asyncio.create_task(presence_cleanup_loop())
+    
+    # Auto-register to main node if configured
+    if MAIN_NODE_URL:
+        try:
+            async with httpx.AsyncClient(timeout=10) as client:
+                # Get this node's external URL from environment or detect
+                my_url = os.getenv("NODE_URL", f"http://localhost:{PORT}")
+                await client.post(f"{MAIN_NODE_URL}/mesh/register", json={
+                    "node_id": NODE_ID,
+                    "url": my_url
+                })
+                print(f"✅ Registered to main node: {MAIN_NODE_URL}")
+        except Exception as e:
+            print(f"⚠️ Could not register to main node: {e}")
+    
     yield
     mesh_task.cancel()
     presence_task.cancel()
@@ -465,6 +481,16 @@ async def mesh_hello(req: MeshHelloReq):
         "timestamp": time.time()
     }
 
+@app.post("/mesh/register")
+async def mesh_register(req: dict):
+    """Register a new peer node (auto-discovery)."""
+    peer_url = req.get("url", "")
+    node_id = req.get("node_id", "")
+    if peer_url and peer_url not in MESH_PEERS:
+        MESH_PEERS.append(peer_url)
+        return {"ok": True, "peers": MESH_PEERS}
+    return {"ok": False, "reason": "already_exists"}
+
 @app.post("/mesh/deliver")
 async def mesh_deliver(req: MeshMessageReq):
     """Receive a message from a peer node for local delivery."""
@@ -489,7 +515,9 @@ async def mesh_deliver(req: MeshMessageReq):
 @app.get("/mesh/status")
 def mesh_status():
     """Current mesh network status."""
-    return mesh.get_status()
+    status = mesh.get_status()
+    status["peers_list"] = MESH_PEERS
+    return status
 
 @app.get("/health")
 def health():
@@ -533,10 +561,26 @@ def download_node_kit():
         
         # 4. deploy.sh
         deploy_content = b"""#!/bin/bash
+# Deploy script for Pager Node
+# Usage: ./deploy.sh [MAIN_NODE_URL]
+# Example: ./deploy.sh https://telegram.iron-siber.ru
+
 set -e
+
+MAIN_NODE="${1:-}"
+NODE_URL="${NODE_URL:-http://localhost:8000}"
+
 python3 -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt
+
+# Auto-register to main node if provided
+if [ -n "$MAIN_NODE" ]; then
+    export MAIN_NODE_URL="$MAIN_NODE"
+    export NODE_URL="$NODE_URL"
+    echo "📡 Will register to main node: $MAIN_NODE"
+fi
+
 echo "Starting Pager Node..."
 uvicorn server:app --host 0.0.0.0 --port 8000
 """
