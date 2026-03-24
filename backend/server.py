@@ -3,6 +3,8 @@ import os
 import sqlite3
 import secrets
 import asyncio
+import tarfile
+import io
 import uuid
 import json
 import time
@@ -415,6 +417,50 @@ def mesh_status():
 @app.get("/health")
 def health():
     return {"status": "ok", "node_id": NODE_ID, "peers": len(mesh.peers)}
+
+@app.get("/download_node_kit")
+def download_node_kit():
+    """Generate and stream a .tar.gz archive for deploying a new Pager node."""
+    buffer = io.BytesIO()
+    with tarfile.open(fileobj=buffer, mode="w:gz") as tar:
+        # 1. server.py
+        with open(BASE_DIR / "server.py", "rb") as f:
+            tar.addfile(tarfile.TarInfo(name="server.py"), f)
+        # 2. index.html
+        with open(BASE_DIR / "index.html", "rb") as f:
+            tar.addfile(tarfile.TarInfo(name="index.html"), f)
+        # 3. requirements.txt
+        req_content = b"fastapi\nuvicorn[standard]\npymongo\npython-multipart\n"
+        tar.addfile(tarfile.TarInfo(name="requirements.txt"), io.BytesIO(req_content))
+        # 4. deploy.sh
+        deploy_content = b"""#!/bin/bash
+set -e
+python3 -m venv venv
+source venv/bin/activate
+pip install -r requirements.txt
+echo "Starting Pager Node..."
+uvicorn server:app --host 0.0.0.0 --port 8000
+"""
+        tar.addfile(tarfile.TarInfo(name="deploy.sh"), io.BytesIO(deploy_content))
+        # 5. README_NODE.txt
+        readme_content = b"""# PAGER NODE KIT
+## Quick Start
+1. chmod +x deploy.sh
+2. ./deploy.sh
+## Environment Variables
+NODE_ID=your-node-id
+MESH_PEERS='["http://other-node:8000"]'
+## Mesh Network
+Nodes ping each other every 30s and exchange SSID lists.
+"""
+        tar.addfile(tarfile.TarInfo(name="README_NODE.txt"), io.BytesIO(readme_content))
+    buffer.seek(0)
+    from fastapi.responses import StreamingResponse
+    return StreamingResponse(
+        buffer,
+        media_type="application/gzip",
+        headers={"Content-Disposition": "attachment; filename=pager_node_kit.tar.gz"}
+    )
 
 if __name__ == "__main__":
     import uvicorn
