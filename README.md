@@ -1,38 +1,78 @@
-# Safarancho Swimming Team — Pager
+# Safarancho Pager — Mesh Network Messenger v7.0
 
-Two components:
+Децентрализованный мессенджер с Mesh-сетью. Стиль: Пейджер 90-х + Matrix + Fallout.
 
-1. **Backend** (`backend/`) — FastAPI server (port 8888). User registration, SS-ID, messaging, WebSocket.
-2. **Android** (`android/`) — Safarancho Pager app (Kotlin). Connects to backend.
+## Компоненты
 
-## Quick Start (Backend)
+| Папка | Описание |
+|-------|----------|
+| `backend/` | FastAPI сервер (порт 9009). Регистрация, WebSocket, Mesh, файлы |
+| `android/` | Android-приложение (Kotlin). Подключается к backend |
+
+## Быстрый старт (Backend)
 
 ```bash
 cd backend
-cp .env.example .env   # edit if needed
+cp .env.example .env   # настройка NODE_ID, MESH_PEERS
 pip install -r requirements.txt
-python server.py       # http://localhost:8888
+python -m uvicorn server:app --host 0.0.0.0 --port 9009
 ```
 
-## Quick Start (Android)
+Или скачай готовый Node Kit:
+```bash
+# В браузере: http://localhost:9009 → кнопка "Download Node Kit"
+# Распаковать и: chmod +x deploy.sh && ./deploy.sh
+```
 
-Open `android/` in Android Studio. Set `BASE_URL` in `build.gradle` or `ApiService.kt`.
-Build → APK.
+## Web-интерфейс
 
-## SS-ID Format
+Открой `http://localhost:9009` в браузере.
 
-`ss-XXXXX-pager` — 5 random chars, generated on first registration.
+### Особенности:
+- **Matrix Rain** — фоновый эффект
+- **Статусы**: 🟢 Онлайн / ⚪ Оффлайн / 🟡 Зомби / 🔴 Убит
+- **Вкладки чатов** — переключение между контактами
+- **Загрузка файлов** — кнопка 📎, превью картинок
+
+## Android
+
+Открой `android/` в Android Studio. Настрой `BASE_URL` в `ApiService.kt` → Собери APK.
+
+### Работает:
+- Регистрация / Logout
+- Чат (текст + картинки)
+- Уведомления (только при открытом приложении)
+
+## Mesh-сеть (децентрализация)
+
+Ноды обмениваются сообщениями через пиры:
+```bash
+# В .env:
+MESH_PEERS='["http://другая-нода:9009"]'
+```
+
+Ноды пингуют друг друга каждые 30 сек.
 
 ## API Endpoints
 
 | Method | Path | Description |
 |--------|------|-------------|
-| POST | /register | Create user (name, display_name) → SS-ID |
-| GET | /contacts | List all registered users |
-| POST | /message | Send message (from, to, text) |
-| GET | /messages/{ss_id} | Get messages for SS-ID |
-| WS | /ws/{ss_id} | Real-time message stream |
+| POST | `/register` | Создать SS-ID (анонимный) |
+| GET | `/contacts` | Список пользователей из MongoDB |
+| POST | `/message` | Отправить сообщение |
+| GET | `/messages/{ss_id}` | История сообщений |
+| WS | `/ws/{ss_id}` | Real-time чат |
+| GET | `/mesh/status` | Статус Mesh-сети |
+| POST | `/mesh/hello` | Ping от пира |
+| POST | `/mesh/deliver` | Маршрутизация через пиры |
+| POST | `/upload` | Загрузить файл |
+| GET | `/download_node_kit` | Скачать архив ноды |
+| GET | `/health` | Проверка здоровья |
 
-## License
+## SS-ID Формат
+
+`ss-xxxx-pager` — 4 hex-символа, генерируется при регистрации.
+
+## Лицензия
 
 Private project.
