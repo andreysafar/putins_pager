@@ -130,19 +130,23 @@ class ChatActivity : AppCompatActivity() {
         Thread {
             try {
                 // Copy URI to temp file
-                val inputStream = contentResolver.openInputStream(uri) ?: runOnUiThread {
-                    Toast.makeText(this, "Не могу открыть файл", Toast.LENGTH_SHORT).show(); return@Thread
+                val inputStream = contentResolver.openInputStream(uri)
+                if (inputStream == null) {
+                    runOnUiThread { Toast.makeText(this, "Не могу открыть файл", Toast.LENGTH_SHORT).show() }
+                    return@Thread
                 }
                 val fileName = getFileName(uri) ?: "file_${System.currentTimeMillis()}"
                 val tempFile = File(cacheDir, fileName)
                 tempFile.outputStream().use { out -> inputStream.copyTo(out) }
+                inputStream.close()
 
                 // Upload to server
                 val result = ApiService.uploadFile(tempFile)
                 tempFile.delete()
 
                 // Send file URL as message
-                val url = result.url ?: run {
+                val url = result.url
+                if (url.isNullOrEmpty()) {
                     runOnUiThread { Toast.makeText(this, "Пустой URL", Toast.LENGTH_SHORT).show() }
                     return@Thread
                 }
