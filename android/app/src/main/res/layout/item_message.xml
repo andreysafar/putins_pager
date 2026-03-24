@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Sports-Punk message bubble -->
+<!-- Matrix message bubble -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:id="@+id/msgContainer"
     android:layout_width="match_parent"
@@ -11,7 +11,7 @@
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:orientation="vertical"
-        android:background="@color/bg_card"
+        android:background="@drawable/bubble_matrix"
         android:padding="10dp"
         android:layout_margin="4dp">
 

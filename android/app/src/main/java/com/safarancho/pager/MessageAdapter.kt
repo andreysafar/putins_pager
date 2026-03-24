@@ -33,26 +33,21 @@ class MessageAdapter(
         val isMine = m.from_ss == mySS
         holder.container.gravity = if (isMine) Gravity.END else Gravity.START
 
-        // Sports-Punk: neon orange for sent, card bg for received
         if (isMine) {
-            val orangeColor = ContextCompat.getColor(holder.itemView.context, R.color.accent)
-            holder.tvText.setTextColor(ContextCompat.getColor(holder.itemView.context, R.color.bg_dark))
+            // Sent = orange bubble, black text
+            val sentBg = ContextCompat.getColor(holder.itemView.context, R.color.sent_msg_bg)
+            val sentText = ContextCompat.getColor(holder.itemView.context, R.color.sent_msg_text)
+            holder.tvText.setTextColor(sentText)
+            holder.tvMeta.setTextColor(android.graphics.Color.argb(160, 0, 0, 0))
             holder.container.backgroundTintList =
-                android.content.res.ColorStateList.valueOf(orangeColor)
-            holder.tvMeta.setTextColor(
-                ContextCompat.getColor(holder.itemView.context, R.color.bg_dark).let {
-                    android.graphics.Color.argb(150, android.graphics.Color.red(it),
-                        android.graphics.Color.green(it), android.graphics.Color.blue(it))
-                }
-            )
+                android.content.res.ColorStateList.valueOf(sentBg)
         } else {
-            val bgColor = ContextCompat.getColor(holder.itemView.context, R.color.bg_card)
+            // Received = dark green bubble, green text
+            val recvBg = ContextCompat.getColor(holder.itemView.context, R.color.received_msg_bg)
             holder.tvText.setTextColor(ContextCompat.getColor(holder.itemView.context, R.color.text_h))
+            holder.tvMeta.setTextColor(ContextCompat.getColor(holder.itemView.context, R.color.text_muted))
             holder.container.backgroundTintList =
-                android.content.res.ColorStateList.valueOf(bgColor)
-            holder.tvMeta.setTextColor(
-                ContextCompat.getColor(holder.itemView.context, R.color.text_muted)
-            )
+                android.content.res.ColorStateList.valueOf(recvBg)
         }
     }
 

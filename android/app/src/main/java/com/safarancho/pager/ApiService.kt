@@ -2,14 +2,19 @@ package com.safarancho.pager
 
 import com.google.gson.Gson
 import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.MediaType.Companion.toMediaTypeOrNull
+import okhttp3.MultipartBody
 import okhttp3.OkHttpClient
 import okhttp3.Request
+import okhttp3.RequestBody.Companion.asRequestBody
 import okhttp3.RequestBody.Companion.toRequestBody
+import java.io.File
 
 // --- Data models ---
 data class RegisterResponse(val ss_id: String, val display_name: String)
 data class Contact(val ss_id: String, val display_name: String)
 data class Message(val from_ss: String, val to_ss: String, val text: String, val created_at: String)
+data class UploadResponse(val url: String)
 
 object ApiService {
     val gson = Gson()
@@ -44,6 +49,31 @@ object ApiService {
         val req = Request.Builder().url("$BASE/messages/$ssId?limit=100").build()
         client.newCall(req).execute().use { resp ->
             return gson.fromJson(resp.body!!.string(), Array<Message>::class.java).toList()
+        }
+    }
+
+    fun uploadFile(file: File): UploadResponse {
+        val mimeType = getMimeType(file.extension)
+        val requestBody = MultipartBody.Builder()
+            .setType(MultipartBody.FORM)
+            .addFormDataPart("file", file.name, file.asRequestBody(mimeType.toMediaTypeOrNull()))
+            .build()
+        val req = Request.Builder().url("$BASE/upload")
+            .post(requestBody).build()
+        client.newCall(req).execute().use { resp ->
+            return gson.fromJson(resp.body!!.string(), UploadResponse::class.java)
+        }
+    }
+
+    private fun getMimeType(ext: String): String {
+        return when (ext.lowercase()) {
+            "jpg", "jpeg" -> "image/jpeg"
+            "png" -> "image/png"
+            "gif" -> "image/gif"
+            "webp" -> "image/webp"
+            "mp4" -> "video/mp4"
+            "pdf" -> "application/pdf"
+            else -> "application/octet-stream"
         }
     }
 }

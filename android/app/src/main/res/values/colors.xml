@@ -13,4 +13,11 @@
     <color name="badge_on">#00ff00</color>
     <color name="smtp_ok">#00ff00</color>
     <color name="smtp_err">#ff3333</color>
+
+    <!-- Matrix additions -->
+    <color name="sent_msg_bg">#ff8800</color>
+    <color name="sent_msg_text">#000000</color>
+    <color name="received_msg_bg">#0d1a0d</color>
+    <color name="card_border">#00aa00</color>
+    <color name="input_border">#00ff00</color>
 </resources>

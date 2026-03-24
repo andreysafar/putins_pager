@@ -5,11 +5,12 @@
     android:orientation="vertical"
     android:background="@color/bg_dark">
 
+    <!-- Header -->
     <TextView
         android:id="@+id/tvHeaderTitle"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:text="🏊 Safarancho Pager"
+        android:text="📟 Safarancho Pager"
         android:textColor="@color/accent"
         android:textSize="20sp"
         android:padding="16dp"
@@ -29,31 +30,35 @@
             android:id="@+id/etName"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:hint="Username"
-            android:textColorHint="#78909c"
-            android:textColor="#e0e0e0"
-            android:background="@color/bg_card"
-            android:padding="12dp"
+            android:hint="&gt; username"
+            android:textColorHint="@color/text_muted"
+            android:textColor="@color/accent"
+            android:background="@drawable/input_matrix"
+            android:padding="14dp"
+            android:fontFamily="monospace"
             android:layout_marginBottom="12dp" />
 
         <EditText
             android:id="@+id/etDisplayName"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:hint="Display Name"
-            android:textColorHint="#78909c"
-            android:textColor="#e0e0e0"
-            android:background="@color/bg_card"
-            android:padding="12dp"
+            android:hint="&gt; display name"
+            android:textColorHint="@color/text_muted"
+            android:textColor="@color/accent"
+            android:background="@drawable/input_matrix"
+            android:padding="14dp"
+            android:fontFamily="monospace"
             android:layout_marginBottom="16dp" />
 
         <Button
             android:id="@+id/btnRegister"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="Register"
-            android:backgroundTint="@color/accent"
-            android:textColor="@color/bg_dark" />
+            android:text="[ REGISTER ]"
+            android:textColor="@color/accent"
+            android:backgroundTint="@color/bg_card"
+            android:fontFamily="monospace"
+            android:textAllCaps="false" />
     </LinearLayout>
 
     <!-- Contacts -->
@@ -76,7 +81,7 @@
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
-                android:textColor="#00ff00"
+                android:textColor="@color/accent"
                 android:textSize="12sp"
                 android:fontFamily="monospace" />
 
@@ -84,7 +89,7 @@
                 android:id="@+id/btnLogout"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="🔴 EXIT"
+                android:text="⏻ EXIT"
                 android:textSize="12sp"
                 android:textColor="#ff4444"
                 style="?android:attr/borderlessButtonStyle" />
@@ -95,12 +100,14 @@
                 android:layout_height="wrap_content"
                 android:text="↻"
                 android:textSize="16sp"
+                android:textColor="@color/accent"
                 style="?android:attr/borderlessButtonStyle" />
         </LinearLayout>
 
         <androidx.recyclerview.widget.RecyclerView
             android:id="@+id/rvContacts"
             android:layout_width="match_parent"
-            android:layout_height="match_parent" />
+            android:layout_height="match_parent"
+            android:padding="4dp" />
     </LinearLayout>
 </LinearLayout>

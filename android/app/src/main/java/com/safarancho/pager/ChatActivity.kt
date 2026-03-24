@@ -1,12 +1,15 @@
 package com.safarancho.pager
 
+import android.content.Intent
 import android.os.Bundle
 import android.widget.Toast
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.recyclerview.widget.LinearLayoutManager
 import com.safarancho.pager.databinding.ActivityChatBinding
 import org.java_websocket.client.WebSocketClient
 import org.java_websocket.handshake.ServerHandshake
+import java.io.File
 import java.net.URI
 
 class ChatActivity : AppCompatActivity() {
@@ -17,6 +20,12 @@ class ChatActivity : AppCompatActivity() {
     private lateinit var contactSS: String
     private lateinit var contactName: String
     private val messages = mutableListOf<Message>()
+
+    // File picker result
+    private val filePicker = registerForActivityResult(ActivityResultContracts.GetContent()) { uri ->
+        uri ?: return@registerForActivityResult
+        uploadAndSendFile(uri)
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -37,6 +46,7 @@ class ChatActivity : AppCompatActivity() {
 
         binding.btnSend.setOnClickListener { sendMessage() }
         binding.btnBack.setOnClickListener { finish() }
+        binding.btnAttach.setOnClickListener { filePicker.launch("*/*") }
 
         loadMessages()
         connectWebSocket()
@@ -54,13 +64,10 @@ class ChatActivity : AppCompatActivity() {
 
                     runOnUiThread {
                         if (msg.from_ss == contactSS) {
-                            // Message in current chat — display it
                             messages.add(msg)
                             binding.rvMessages.adapter?.notifyItemInserted(messages.size - 1)
                             binding.rvMessages.scrollToPosition(messages.size - 1)
                         } else {
-                            // Message from OTHER contact — show push notification
-                            // (don't disrupt current chat view)
                             NotificationHelper.showMessageNotification(
                                 this@ChatActivity, msg.from_ss, msg.from_ss, msg.text
                             )
@@ -111,11 +118,61 @@ class ChatActivity : AppCompatActivity() {
                     )
                     messages.add(msg)
                     binding.rvMessages.adapter?.notifyItemInserted(messages.size - 1)
+                    binding.rvMessages.scrollToPosition(messages.size - 1)
                 }
             } catch (e: Exception) {
                 runOnUiThread { Toast.makeText(this, "Ошибка: ${e.message}", Toast.LENGTH_SHORT).show() }
             }
         }.start()
+    }
+
+    private fun uploadAndSendFile(uri: android.net.Uri) {
+        Thread {
+            try {
+                // Copy URI to temp file
+                val inputStream = contentResolver.openInputStream(uri) ?: return@Thread
+                val fileName = getFileName(uri) ?: "file_${System.currentTimeMillis()}"
+                val tempFile = File(cacheDir, fileName)
+                tempFile.outputStream().use { out -> inputStream.copyTo(out) }
+
+                // Upload to server
+                val result = ApiService.uploadFile(tempFile)
+                tempFile.delete()
+
+                // Send file URL as message
+                ApiService.sendMessage(mySS, contactSS, result.url)
+
+                runOnUiThread {
+                    val msg = Message(
+                        from_ss = mySS, to_ss = contactSS,
+                        text = "📎 ${result.url}", created_at = java.time.Instant.now().toString()
+                    )
+                    messages.add(msg)
+                    binding.rvMessages.adapter?.notifyItemInserted(messages.size - 1)
+                    binding.rvMessages.scrollToPosition(messages.size - 1)
+                    Toast.makeText(this, "Файл загружен ✓", Toast.LENGTH_SHORT).show()
+                }
+            } catch (e: Exception) {
+                runOnUiThread { Toast.makeText(this, "Ошибка загрузки: ${e.message}", Toast.LENGTH_SHORT).show() }
+            }
+        }.start()
+    }
+
+    private fun getFileName(uri: android.net.Uri): String? {
+        var name: String? = null
+        if (uri.scheme == "content") {
+            val cursor = contentResolver.query(uri, null, null, null, null)
+            cursor?.use {
+                if (it.moveToFirst()) {
+                    val idx = it.getColumnIndex(android.provider.OpenableColumns.DISPLAY_NAME)
+                    if (idx >= 0) name = it.getString(idx)
+                }
+            }
+        }
+        if (name == null) {
+            name = uri.path?.substringAfterLast('/')
+        }
+        return name
     }
 
     override fun onDestroy() {
