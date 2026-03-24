@@ -61,7 +61,14 @@ object ApiService {
         val req = Request.Builder().url("$BASE/upload")
             .post(requestBody).build()
         client.newCall(req).execute().use { resp ->
-            return gson.fromJson(resp.body!!.string(), UploadResponse::class.java)
+            if (!resp.isSuccessful) {
+                throw Exception("Upload failed: ${resp.code}")
+            }
+            val body = resp.body?.string()
+            if (body.isNullOrEmpty()) {
+                throw Exception("Empty response from server")
+            }
+            return gson.fromJson(body, UploadResponse::class.java)
         }
     }
 

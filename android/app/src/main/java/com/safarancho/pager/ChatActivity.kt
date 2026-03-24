@@ -130,7 +130,9 @@ class ChatActivity : AppCompatActivity() {
         Thread {
             try {
                 // Copy URI to temp file
-                val inputStream = contentResolver.openInputStream(uri) ?: return@Thread
+                val inputStream = contentResolver.openInputStream(uri) ?: runOnUiThread {
+                    Toast.makeText(this, "Не могу открыть файл", Toast.LENGTH_SHORT).show(); return@Thread
+                }
                 val fileName = getFileName(uri) ?: "file_${System.currentTimeMillis()}"
                 val tempFile = File(cacheDir, fileName)
                 tempFile.outputStream().use { out -> inputStream.copyTo(out) }
@@ -140,12 +142,16 @@ class ChatActivity : AppCompatActivity() {
                 tempFile.delete()
 
                 // Send file URL as message
-                ApiService.sendMessage(mySS, contactSS, result.url)
+                val url = result.url ?: run {
+                    runOnUiThread { Toast.makeText(this, "Пустой URL", Toast.LENGTH_SHORT).show() }
+                    return@Thread
+                }
+                ApiService.sendMessage(mySS, contactSS, url)
 
                 runOnUiThread {
                     val msg = Message(
                         from_ss = mySS, to_ss = contactSS,
-                        text = "📎 ${result.url}", created_at = java.time.Instant.now().toString()
+                        text = "📎 $url", created_at = java.time.Instant.now().toString()
                     )
                     messages.add(msg)
                     binding.rvMessages.adapter?.notifyItemInserted(messages.size - 1)
@@ -153,7 +159,8 @@ class ChatActivity : AppCompatActivity() {
                     Toast.makeText(this, "Файл загружен ✓", Toast.LENGTH_SHORT).show()
                 }
             } catch (e: Exception) {
-                runOnUiThread { Toast.makeText(this, "Ошибка загрузки: ${e.message}", Toast.LENGTH_SHORT).show() }
+                e.printStackTrace()
+                runOnUiThread { Toast.makeText(this, "Ошибка: ${e.message}", Toast.LENGTH_SHORT).show() }
             }
         }.start()
     }

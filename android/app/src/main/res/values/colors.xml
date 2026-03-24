@@ -1,23 +1,22 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- Matrix / Pager 90s theme -->
-    <color name="bg_dark">#0a0a0a</color>
-    <color name="bg_header">#001a00</color>
-    <color name="bg_card">#0d1a0d</color>
-    <color name="accent">#00ff00</color>
-    <color name="accent_dim">#00aa00</color>
-    <color name="white">#00ff00</color>
-    <color name="text_h">#00ff00</color>
-    <color name="text_muted">#00aa00</color>
-    <color name="badge_off">#333333</color>
-    <color name="badge_on">#00ff00</color>
-    <color name="smtp_ok">#00ff00</color>
-    <color name="smtp_err">#ff3333</color>
-
-    <!-- Matrix additions -->
-    <color name="sent_msg_bg">#ff8800</color>
-    <color name="sent_msg_text">#000000</color>
-    <color name="received_msg_bg">#0d1a0d</color>
-    <color name="card_border">#00aa00</color>
-    <color name="input_border">#00ff00</color>
+    <!-- 2000s / Pager theme -->
+    <color name="bg_dark">#1a1a1a</color>
+    <color name="bg_header">#2d2d2d</color>
+    <color name="bg_card">#252525</color>
+    <color name="accent">#cccccc</color>
+    <color name="accent_dim">#888888</color>
+    <color name="white">#dddddd</color>
+    <color name="text_h">#eeeeee</color>
+    <color name="text_muted">#aaaaaa</color>
+    <color name="badge_off">#444444</color>
+    <color name="badge_on">#cccccc</color>
+    <color name="smtp_ok">#88cc88</color>
+    <color name="smtp_err">#cc8888</color>
+    <!-- Matrix additions (darker) -->
+    <color name="sent_msg_bg">#3a3a00</color>
+    <color name="sent_msg_text">#e0e000</color>
+    <color name="received_msg_bg">#1a2a1a</color>
+    <color name="card_border">#3a3a3a</color>
+    <color name="input_border">#4a4a4a</color>
 </resources>
