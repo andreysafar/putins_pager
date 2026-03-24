@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="ru">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -8,17 +8,25 @@
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: system-ui, sans-serif; background: #0a1628; color: #e0e0e0; }
   #app { max-width: 480px; margin: 0 auto; height: 100vh; display: flex; flex-direction: column; }
-  header { background: #1a2744; padding: 12px 16px; display: flex; align-items: center; gap: 12px; }
+  header { background: #1a2744; padding: 12px 16px; display: flex; flex-direction: column; gap: 4px; }
+  header .top { display: flex; align-items: center; gap: 12px; }
   header h1 { font-size: 18px; color: #4fc3f7; }
-  .screen { display: none; flex: 1; flex-direction: column; }
+  .tagline { font-size: 12px; color: #90a4ae; line-height: 1.35; }
+  .screen { display: none; flex: 1; flex-direction: column; overflow: hidden; }
   .screen.active { display: flex; }
-  #register-form { padding: 24px; display: flex; flex-direction: column; gap: 12px; justify-content: center; flex: 1; }
+  #register-form { padding: 16px 20px 24px; display: flex; flex-direction: column; gap: 12px; flex: 1; overflow-y: auto; }
   #register-form input, #register-form button { padding: 12px; border-radius: 8px; border: none; font-size: 16px; }
   #register-form input { background: #1a2744; color: #e0e0e0; }
   #register-form button { background: #4fc3f7; color: #0a1628; font-weight: bold; cursor: pointer; }
+  .help-box { background: #0d2138; border: 1px solid #2a4a6e; border-radius: 10px; padding: 12px 14px; font-size: 13px; line-height: 1.5; color: #b0bec5; }
+  .help-box strong { color: #4fc3f7; }
+  .help-box ol { margin: 8px 0 0 18px; }
+  .help-box li { margin: 4px 0; }
+  .help-toggle { background: none; border: none; color: #4fc3f7; font-size: 13px; cursor: pointer; text-decoration: underline; padding: 0; align-self: flex-start; }
   #contacts-list { flex: 1; overflow-y: auto; padding: 8px; }
   .contact { padding: 12px 16px; border-radius: 8px; margin: 4px 0; cursor: pointer; background: #1a2744; }
   .contact:hover { background: #243656; }
+  .empty-hint { padding: 20px 16px; font-size: 14px; line-height: 1.5; color: #90a4ae; text-align: center; }
   #chat-screen { flex-direction: column; }
   #messages { flex: 1; overflow-y: auto; padding: 12px; display: flex; flex-direction: column; gap: 8px; }
   .msg { max-width: 80%; padding: 10px 14px; border-radius: 12px; font-size: 14px; }
@@ -28,40 +36,61 @@
   #chat-input { display: flex; gap: 8px; padding: 12px; background: #1a2744; }
   #chat-input input { flex: 1; padding: 10px; border-radius: 8px; border: none; background: #0a1628; color: #e0e0e0; font-size: 14px; }
   #chat-input button { padding: 10px 16px; border-radius: 8px; border: none; background: #4fc3f7; color: #0a1628; font-weight: bold; cursor: pointer; }
-  .ss-badge { font-size: 12px; color: #78909c; }
-  #my-id { padding: 8px 16px; font-size: 12px; color: #78909c; background: #0d1f3c; }
+  .ss-badge { font-size: 11px; color: #78909c; word-break: break-all; }
+  #my-id { padding: 10px 16px; font-size: 12px; color: #b0bec5; background: #0d1f3c; line-height: 1.4; }
+  .muted-link { font-size: 11px; color: #546e7a; text-align: center; margin-top: 8px; }
+  .muted-link a { color: #78909c; }
 </style>
 </head>
 <body>
 <div id="app">
   <header>
-    <h1>🏊 Safarancho Pager</h1>
-    <span id="my-ss" class="ss-badge"></span>
+    <div class="top">
+      <h1>🏊 Safarancho Pager</h1>
+      <span id="my-ss" class="ss-badge"></span>
+    </div>
+    <p class="tagline" id="header-hint">Веб-пейджер: регистрация → список людей → чат. Два человека = два браузера (или два устройства).</p>
   </header>
 
   <div id="register-screen" class="screen active">
     <form id="register-form">
-      <h2 style="text-align:center; color:#4fc3f7;">Join the Team</h2>
-      <input id="reg-name" placeholder="Username" required>
-      <input id="reg-display" placeholder="Display Name" required>
-      <button type="submit">Register</button>
+      <h2 style="text-align:center; color:#4fc3f7;">Вход в команду</h2>
+      <p class="help-box">
+        <strong>Зачем это:</strong> тебе выдаётся уникальный <strong>SS-ID</strong> (как позывной). По нему сервер понимает, кто пишет и кому доставлять сообщения.
+      </p>
+      <button type="button" class="help-toggle" id="help-more-btn" aria-expanded="false">Как пользоваться (пошагово) ▼</button>
+      <div id="help-more" class="help-box" style="display:none;">
+        <ol>
+          <li>Заполни поля и нажми <strong>«Зарегистрироваться»</strong> — получишь SS-ID (виден в шапке).</li>
+          <li>Чтобы кто-то появился в списке, <strong>второй человек</strong> должен зайти на этот же сайт и тоже зарегистрироваться.</li>
+          <li>Нажми на человека в списке — откроется чат. Пиши и жми <strong>«Отправить»</strong> (или Enter).</li>
+          <li>Сообщения подтягиваются через WebSocket; если связь рвётся, страница сама переподключится.</li>
+        </ol>
+      </div>
+      <input id="reg-name" placeholder="Логин (для себя, латиница/цифры)" required autocomplete="username">
+      <input id="reg-display" placeholder="Отображаемое имя (как тебя видят другие)" required autocomplete="nickname">
+      <button type="submit">Зарегистрироваться</button>
+      <p class="muted-link">Уже пробовал и всё сломалось? <a href="#" id="reset-local">Сбросить этот браузер</a> (очистит SS-ID)</p>
     </form>
   </div>
 
   <div id="contacts-screen" class="screen">
     <div id="my-id"></div>
     <div id="contacts-list"></div>
+    <div id="contacts-empty" class="empty-hint" style="display:none;">
+      Пока некому писать: в базе только ты. Пусть собеседник откроет <strong>ту же ссылку</strong> и зарегистрируется — тогда он появится здесь.
+    </div>
   </div>
 
   <div id="chat-screen" class="screen">
-    <div id="chat-header" style="padding:8px 16px; background:#1a2744;">
+    <div id="chat-header" style="padding:8px 16px; background:#1a2744; overflow:hidden;">
       <span id="chat-with"></span>
-      <button onclick="showScreen('contacts-screen')" style="float:right; background:none; border:none; color:#4fc3f7; cursor:pointer;">← Back</button>
+      <button type="button" onclick="showScreen('contacts-screen')" style="float:right; background:none; border:none; color:#4fc3f7; cursor:pointer;">← К списку</button>
     </div>
     <div id="messages"></div>
     <div id="chat-input">
-      <input id="msg-input" placeholder="Type a message...">
-      <button onclick="sendMessage()">Send</button>
+      <input id="msg-input" placeholder="Текст сообщения…" autocomplete="off">
+      <button type="button" onclick="sendMessage()">Отправить</button>
     </div>
   </div>
 </div>
@@ -72,16 +101,29 @@ let mySS = localStorage.getItem('ss_id');
 let myName = localStorage.getItem('display_name');
 let ws = null;
 let chatWith = null;
-let pollTimer = null;
 
-// --- Screens ---
+document.getElementById('help-more-btn').onclick = function () {
+  const box = document.getElementById('help-more');
+  const open = box.style.display !== 'block';
+  box.style.display = open ? 'block' : 'none';
+  this.setAttribute('aria-expanded', open);
+  this.textContent = open ? 'Свернуть инструкцию ▲' : 'Как пользоваться (пошагово) ▼';
+};
+
+document.getElementById('reset-local').onclick = function (e) {
+  e.preventDefault();
+  if (!confirm('Удалить SS-ID в этом браузере? Придётся зарегистрироваться заново.')) return;
+  localStorage.removeItem('ss_id');
+  localStorage.removeItem('display_name');
+  location.reload();
+};
+
 function showScreen(id) {
   document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
   document.getElementById(id).classList.add('active');
   if (id === 'contacts-screen') loadContacts();
 }
 
-// --- Register ---
 document.getElementById('register-form').onsubmit = async (e) => {
   e.preventDefault();
   const name = document.getElementById('reg-name').value.trim();
@@ -90,6 +132,10 @@ document.getElementById('register-form').onsubmit = async (e) => {
     method: 'POST', headers: {'Content-Type':'application/json'},
     body: JSON.stringify({name, display_name})
   });
+  if (!res.ok) {
+    alert('Ошибка регистрации: ' + res.status);
+    return;
+  }
   const data = await res.json();
   mySS = data.ss_id;
   myName = data.display_name;
@@ -98,34 +144,36 @@ document.getElementById('register-form').onsubmit = async (e) => {
   initSession();
 };
 
-// --- Init ---
 function initSession() {
   if (!mySS) return;
   document.getElementById('my-ss').textContent = mySS;
-  document.getElementById('my-id').textContent = 'Your SS-ID: ' + mySS;
+  document.getElementById('my-id').innerHTML =
+    '<strong>Твой SS-ID:</strong> ' + mySS + '<br><span style="opacity:.85">Перешли собеседнику ссылку на сайт — после его регистрации он появится в списке.</span>';
+  document.getElementById('header-hint').textContent = 'Открой список и выбери контакт для чата.';
   showScreen('contacts-screen');
   connectWS();
 }
 
-// --- Contacts ---
 async function loadContacts() {
   const res = await fetch(API + '/contacts');
   const contacts = await res.json();
   const list = document.getElementById('contacts-list');
+  const emptyEl = document.getElementById('contacts-empty');
   list.innerHTML = '';
-  contacts.filter(c => c.ss_id !== mySS).forEach(c => {
+  const others = contacts.filter(c => c.ss_id !== mySS);
+  others.forEach(c => {
     const div = document.createElement('div');
     div.className = 'contact';
     div.textContent = c.display_name + ' (' + c.ss_id + ')';
     div.onclick = () => openChat(c.ss_id, c.display_name);
     list.appendChild(div);
   });
+  emptyEl.style.display = others.length ? 'none' : 'block';
 }
 
-// --- Chat ---
 async function openChat(ss_id, name) {
   chatWith = ss_id;
-  document.getElementById('chat-with').textContent = name;
+  document.getElementById('chat-with').textContent = 'Чат: ' + name;
   showScreen('chat-screen');
   await loadMessages();
   document.getElementById('msg-input').focus();
@@ -156,7 +204,6 @@ async function sendMessage() {
   const text = input.value.trim();
   if (!text || !chatWith) return;
   input.value = '';
-  // Send via WS if connected, else HTTP
   if (ws && ws.readyState === WebSocket.OPEN) {
     ws.send(JSON.stringify({action:'send', to_ss: chatWith, text}));
   } else {
@@ -165,7 +212,6 @@ async function sendMessage() {
       body: JSON.stringify({from_ss: mySS, to_ss: chatWith, text})
     });
   }
-  // Optimistic append
   appendMsg({from_ss: mySS, text, created_at: new Date().toISOString()});
   document.getElementById('messages').scrollTop = 999999;
 }
@@ -174,7 +220,6 @@ document.getElementById('msg-input').onkeydown = (e) => {
   if (e.key === 'Enter') sendMessage();
 };
 
-// --- WebSocket ---
 function connectWS() {
   const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
   ws = new WebSocket(proto + '//' + location.host + '/ws/' + mySS);
@@ -188,7 +233,6 @@ function connectWS() {
   ws.onclose = () => setTimeout(connectWS, 3000);
 }
 
-// --- Boot ---
 if (mySS) initSession();
 </script>
 </body>
