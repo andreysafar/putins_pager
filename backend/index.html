@@ -7,25 +7,56 @@
     <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700;800&display=swap" rel="stylesheet">
     <style>
         :root {
-            --bg: #050a14;
-            --neon: #ff6d00;
-            --neon-glow: rgba(255,109,0,0.5);
-            --neon-dim: rgba(255,109,0,0.15);
-            --cyan: #00e5ff;
-            --cyan-glow: rgba(0,229,255,0.4);
-            --text: #e2e8f0;
-            --dim: #64748b;
-            --card: #0f172a;
-            --surface: #0a0f1a;
-            --border: #1e293b;
+            --bg: #0a0a0a;
+            --green: #00ff00;
+            --green-glow: rgba(0,255,0,0.5);
+            --green-dim: rgba(0,255,0,0.12);
+            --green-dark: #0a3a0a;
+            --cyan: #00ccff;
+            --cyan-glow: rgba(0,204,255,0.4);
+            --orange: #ff8800;
+            --orange-glow: rgba(255,136,0,0.4);
+            --amber: #ffb000;
+            --text: #b0ffb0;
+            --dim: #4a6a4a;
+            --card: #0d1a0d;
+            --surface: #070e07;
+            --border: #1a3a1a;
+            --scanline: rgba(0,255,0,0.03);
         }
 
         * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'JetBrains Mono', monospace; }
 
+        /* === CRT SCANLINES OVERLAY === */
+        body::after {
+            content: '';
+            position: fixed;
+            inset: 0;
+            background: repeating-linear-gradient(
+                0deg,
+                transparent,
+                transparent 2px,
+                var(--scanline) 2px,
+                var(--scanline) 4px
+            );
+            pointer-events: none;
+            z-index: 9999;
+        }
+
+        /* === MATRIX RAIN CANVAS === */
+        #matrix-rain {
+            position: fixed;
+            inset: 0;
+            z-index: 0;
+            opacity: 0.08;
+            pointer-events: none;
+        }
+
         /* === SCROLLBAR === */
-        ::-webkit-scrollbar { width: 4px; }
+        ::-webkit-scrollbar { width: 6px; }
         ::-webkit-scrollbar-track { background: var(--bg); }
-        ::-webkit-scrollbar-thumb { background: var(--neon); border-radius: 2px; }
+        ::-webkit-scrollbar-thumb { background: var(--green-dark); border: 1px solid var(--green-dim); }
+        ::-webkit-scrollbar-thumb:hover { background: var(--green); box-shadow: 0 0 8px var(--green-glow); }
 
         body {
             background: var(--bg);
@@ -34,37 +65,58 @@
             flex-direction: column;
             height: 100vh;
             overflow: hidden;
+            position: relative;
             background-image:
-                radial-gradient(ellipse at 20% 50%, rgba(255,109,0,0.03) 0%, transparent 50%),
-                radial-gradient(ellipse at 80% 20%, rgba(0,229,255,0.02) 0%, transparent 50%);
+                radial-gradient(ellipse at 30% 50%, rgba(0,255,0,0.04) 0%, transparent 50%),
+                radial-gradient(ellipse at 70% 20%, rgba(0,255,0,0.02) 0%, transparent 50%);
         }
 
         /* ========== REGISTRATION ========== */
         #reg-box {
-            background: linear-gradient(135deg, var(--card) 0%, #0d1117 100%);
+            background: linear-gradient(180deg, #0d1a0d 0%, #050a05 100%);
             padding: 40px 30px;
-            border-radius: 16px;
+            border-radius: 4px;
             margin: 15vh 16px;
             text-align: center;
-            box-shadow: 0 0 60px rgba(0,0,0,0.9), inset 0 1px 0 rgba(255,255,255,0.05);
-            border: 1px solid var(--border);
+            box-shadow: 0 0 60px rgba(0,0,0,0.9), inset 0 0 30px rgba(0,255,0,0.02);
+            border: 2px solid var(--border);
             animation: fadeInUp 0.6s ease-out;
+            position: relative;
+            z-index: 1;
+        }
+        #reg-box::before {
+            content: '';
+            position: absolute;
+            inset: 4px;
+            border: 1px solid var(--green-dim);
+            border-radius: 2px;
+            pointer-events: none;
         }
         #reg-box h2 {
-            color: var(--neon);
+            color: var(--green);
             margin-bottom: 10px;
             font-size: 1.4rem;
-            text-shadow: 0 0 20px var(--neon-glow);
+            text-shadow: 0 0 20px var(--green-glow), 0 0 40px rgba(0,255,0,0.3);
+            animation: textFlicker 4s ease-in-out infinite;
         }
         #reg-box p { font-size: 0.75rem; color: var(--text); margin-bottom: 24px; line-height: 1.6; }
         #reg-box .sub { font-size: 0.55rem; color: var(--dim); margin-top: 20px; letter-spacing: 2px; }
 
+        @keyframes textFlicker {
+            0%, 100% { opacity: 1; }
+            92% { opacity: 1; }
+            93% { opacity: 0.8; }
+            94% { opacity: 1; }
+            96% { opacity: 0.9; }
+            97% { opacity: 1; }
+        }
+
         /* ========== HEADER ========== */
         header {
             padding: 14px 16px;
-            background: rgba(0,0,0,0.8);
+            background: rgba(5,10,5,0.92);
             backdrop-filter: blur(10px);
-            border-bottom: 2px solid var(--neon);
+            border-bottom: 2px solid var(--green-dark);
             display: flex;
             justify-content: space-between;
             align-items: center;
@@ -78,34 +130,52 @@
             left: 0;
             width: 100%;
             height: 2px;
-            background: linear-gradient(90deg, transparent, var(--neon), transparent);
+            background: linear-gradient(90deg, transparent, var(--green), transparent);
             animation: headerGlow 3s ease-in-out infinite;
         }
         @keyframes headerGlow {
             0%, 100% { opacity: 0.3; }
             50% { opacity: 1; }
         }
-        h1 { font-size: 1rem; color: var(--neon); text-shadow: 0 0 10px var(--neon-glow); }
+        h1 { font-size: 1rem; color: var(--green); text-shadow: 0 0 10px var(--green-glow); }
         .header-info { font-size: 0.55rem; color: var(--dim); margin-top: 2px; }
 
-        /* Lamp */
+        /* === 7-SEGMENT LAMP === */
+        #lamp-container {
+            position: relative;
+            width: 50px;
+            height: 28px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
         #lamp {
-            width: 16px; height: 16px;
+            width: 24px; height: 24px;
             border-radius: 50%;
-            background: #1a1a2e;
-            border: 2px solid #333;
-            transition: all 0.3s ease;
+            background: #0a1a0a;
+            border: 2px solid #1a3a1a;
+            box-shadow: inset 0 0 8px rgba(0,0,0,0.8);
+            transition: all 0.15s ease;
             position: relative;
         }
         #lamp.active {
-            background: var(--neon);
-            border-color: var(--neon);
-            box-shadow: 0 0 20px var(--neon), 0 0 40px var(--neon-glow);
-            animation: lampPulse 0.6s ease-in-out infinite alternate;
+            background: var(--green);
+            border-color: var(--green);
+            box-shadow: 0 0 15px var(--green), 0 0 30px var(--green-glow), 0 0 60px rgba(0,255,0,0.2), inset 0 0 5px rgba(255,255,255,0.3);
         }
-        @keyframes lampPulse {
-            0% { box-shadow: 0 0 15px var(--neon), 0 0 30px var(--neon-glow); transform: scale(1); }
-            100% { box-shadow: 0 0 25px var(--neon), 0 0 50px var(--neon-glow); transform: scale(1.15); }
+        #lamp.fade-out {
+            transition: all 1.8s ease-out;
+            background: #1a3a1a;
+            border-color: #2a4a2a;
+            box-shadow: 0 0 4px rgba(0,255,0,0.15);
+        }
+        .lamp-label {
+            font-size: 0.4rem;
+            color: var(--dim);
+            position: absolute;
+            bottom: -10px;
+            letter-spacing: 1px;
+            white-space: nowrap;
         }
 
         /* ========== MESH STATUS BAR ========== */
@@ -121,13 +191,13 @@
         }
         .status-item { display: flex; align-items: center; gap: 6px; }
         .status-dot { width: 7px; height: 7px; border-radius: 50%; }
-        .dot-green { background: #4caf50; box-shadow: 0 0 6px #4caf50; }
-        .dot-orange { background: var(--neon); box-shadow: 0 0 6px var(--neon-glow); }
-        .dot-red { background: #ff5252; box-shadow: 0 0 6px rgba(255,82,82,0.5); }
+        .dot-green { background: var(--green); box-shadow: 0 0 6px var(--green-glow); }
+        .dot-orange { background: var(--amber); box-shadow: 0 0 6px rgba(255,176,0,0.5); }
+        .dot-red { background: #ff3333; box-shadow: 0 0 6px rgba(255,51,51,0.5); }
 
         /* ========== CONTACTS PANEL ========== */
         #contacts-panel {
-            background: rgba(0,0,0,0.6);
+            background: rgba(5,10,5,0.6);
             border-bottom: 1px solid var(--border);
             padding: 12px 16px;
             display: flex;
@@ -143,26 +213,21 @@
             background: var(--card);
             border: 1px solid var(--border);
             padding: 10px 16px;
-            border-radius: 10px;
+            border-radius: 2px;
             font-size: 0.7rem;
             white-space: nowrap;
             cursor: pointer;
-            color: var(--neon);
-            transition: all 0.25s ease;
+            color: var(--green);
+            transition: all 0.2s ease;
             flex-shrink: 0;
             position: relative;
-            overflow: hidden;
+            text-shadow: 0 0 6px var(--green-glow);
         }
-        .contact-card::before {
-            content: '';
-            position: absolute;
-            top: 0; left: -100%;
-            width: 100%; height: 100%;
-            background: linear-gradient(90deg, transparent, rgba(255,109,0,0.08), transparent);
-            transition: left 0.5s ease;
+        .contact-card:hover {
+            border-color: var(--green);
+            box-shadow: 0 0 16px var(--green-dim), inset 0 0 20px rgba(0,255,0,0.05);
+            background: #0f2a0f;
         }
-        .contact-card:hover { border-color: var(--neon); box-shadow: 0 0 16px var(--neon-glow); transform: translateY(-2px); }
-        .contact-card:hover::before { left: 100%; }
         .contact-card .ssid { font-size: 0.5rem; color: var(--dim); margin-top: 3px; }
 
         /* ========== MAIN CHAT ========== */
@@ -171,126 +236,164 @@
             overflow-y: auto;
             padding: 16px;
             display: flex;
-            flex-direction: column-reverse;
+            flex-direction: column;
             gap: 12px;
+            position: relative;
+            z-index: 1;
         }
         .msg {
             background: var(--card);
             padding: 14px 16px;
-            border-radius: 12px;
+            border-radius: 2px;
             border-left: 3px solid var(--dim);
             font-size: 0.85rem;
-            line-height: 1.5;
+            line-height: 1.6;
             animation: msgIn 0.3s ease-out;
-            transition: transform 0.2s;
+            position: relative;
+            max-width: 90%;
         }
-        .msg:hover { transform: translateX(4px); }
-        .msg.inbound { border-left-color: var(--neon); box-shadow: -4px 0 20px var(--neon-dim); }
-        .msg .meta { font-size: 0.55rem; color: var(--dim); margin-bottom: 6px; letter-spacing: 0.5px; }
+        .msg::after {
+            content: '█';
+            animation: cursorBlink 1s step-end infinite;
+            color: var(--green);
+            margin-left: 2px;
+            font-size: 0.8em;
+        }
+        .msg.typing-done::after { display: none; }
+
+        @keyframes cursorBlink {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0; }
+        }
+
+        /* Inbound: cyan accent */
+        .msg.inbound {
+            border-left-color: var(--cyan);
+            box-shadow: -4px 0 20px rgba(0,204,255,0.1);
+            align-self: flex-start;
+        }
+        .msg.inbound .meta { color: var(--cyan); }
+
+        /* Outbound: orange accent */
+        .msg.outbound {
+            border-left-color: var(--orange);
+            box-shadow: -4px 0 20px rgba(255,136,0,0.1);
+            align-self: flex-end;
+            background: #1a120a;
+        }
+        .msg.outbound .meta { color: var(--orange); }
+
+        .msg .meta {
+            font-size: 0.55rem;
+            margin-bottom: 6px;
+            letter-spacing: 0.5px;
+            opacity: 0.8;
+        }
+        .msg .text-content {
+            overflow: hidden;
+            white-space: pre-wrap;
+            word-break: break-word;
+        }
         @keyframes msgIn {
-            from { opacity: 0; transform: translateY(10px); }
+            from { opacity: 0; transform: translateY(8px); }
             to { opacity: 1; transform: translateY(0); }
         }
 
         /* ========== FOOTER ========== */
         footer {
             padding: 14px 16px;
-            background: rgba(0,0,0,0.85);
+            background: rgba(5,10,5,0.92);
             backdrop-filter: blur(10px);
             border-top: 1px solid var(--border);
             display: flex;
             flex-direction: column;
             gap: 10px;
+            position: relative;
+            z-index: 10;
         }
         .input-group { display: flex; gap: 10px; align-items: center; }
         input {
-            background: #111827;
+            background: #070e07;
             border: 1px solid var(--border);
-            color: #fff;
-            padding: 12px 14px;
-            border-radius: 8px;
+            color: var(--green);
+            padding: 14px 16px;
+            border-radius: 2px;
             outline: none;
             flex: 1;
-            font-size: 0.8rem;
+            font-size: 0.85rem;
             font-family: 'JetBrains Mono', monospace;
             transition: border-color 0.3s, box-shadow 0.3s;
+            text-shadow: 0 0 4px var(--green-dim);
         }
-        input:focus { border-color: var(--neon); box-shadow: 0 0 12px var(--neon-dim); }
-        input::placeholder { color: #374151; }
+        input:focus {
+            border-color: var(--green);
+            box-shadow: 0 0 12px var(--green-dim), inset 0 0 8px rgba(0,255,0,0.03);
+        }
+        input::placeholder { color: #1a3a1a; }
 
-        /* Buttons */
+        /* === BIG PHONE-KEY BUTTONS === */
         button {
-            background: var(--neon);
-            color: #000;
-            border: none;
-            padding: 12px 20px;
-            border-radius: 8px;
+            background: var(--green-dark);
+            color: var(--green);
+            border: 2px solid var(--border);
+            padding: 16px 24px;
+            border-radius: 2px;
             font-weight: 800;
             cursor: pointer;
             text-transform: uppercase;
             font-family: 'JetBrains Mono', monospace;
-            font-size: 0.8rem;
-            transition: all 0.25s ease;
-            position: relative;
-            overflow: hidden;
-        }
-        button::after {
-            content: '';
-            position: absolute;
-            top: 50%; left: 50%;
-            width: 0; height: 0;
-            background: rgba(255,255,255,0.2);
-            border-radius: 50%;
-            transition: all 0.4s ease;
-            transform: translate(-50%, -50%);
-        }
-        button:active::after { width: 200px; height: 200px; opacity: 0; }
-        button:hover {
-            box-shadow: 0 0 20px var(--neon-glow), 0 0 40px rgba(255,109,0,0.2);
-            transform: translateY(-1px);
-        }
-        .btn-small {
-            padding: 8px 14px !important;
-            font-size: 0.55rem !important;
-            background: var(--card) !important;
-            color: var(--neon) !important;
-            border: 1px solid var(--border) !important;
-        }
-        .btn-small:hover {
-            border-color: var(--neon) !important;
-            background: rgba(255,109,0,0.1) !important;
-        }
-
-        /* ========== DOWNLOAD NODE KIT BUTTON ========== */
-        .btn-download {
-            background: transparent !important;
-            color: var(--cyan) !important;
-            border: 1px solid var(--cyan) !important;
-            padding: 10px 18px !important;
-            font-size: 0.65rem !important;
+            font-size: 0.9rem;
+            transition: all 0.15s ease;
+            text-shadow: 0 0 6px var(--green-glow);
             letter-spacing: 1px;
             position: relative;
-            z-index: 1;
+            box-shadow: inset 0 1px 0 rgba(0,255,0,0.1), 0 2px 4px rgba(0,0,0,0.5);
         }
-        .btn-download::before {
-            content: '';
-            position: absolute;
-            inset: 0;
-            background: linear-gradient(135deg, rgba(0,229,255,0.1), transparent);
-            border-radius: 8px;
-            z-index: -1;
-            opacity: 0;
-            transition: opacity 0.3s;
+        button:hover {
+            background: var(--green);
+            color: #000;
+            border-color: var(--green);
+            box-shadow: 0 0 20px var(--green-glow), 0 0 40px rgba(0,255,0,0.15);
+            text-shadow: none;
+        }
+        button:active {
+            transform: translateY(2px);
+            box-shadow: inset 0 2px 4px rgba(0,0,0,0.5);
+        }
+        .btn-small {
+            padding: 10px 16px !important;
+            font-size: 0.6rem !important;
+            background: var(--card) !important;
+            color: var(--dim) !important;
+            border: 1px solid var(--border) !important;
+            text-shadow: none !important;
+        }
+        .btn-small:hover {
+            border-color: var(--green) !important;
+            color: var(--green) !important;
+            background: var(--green-dark) !important;
+            text-shadow: 0 0 6px var(--green-glow) !important;
+        }
+
+        /* ========== DOWNLOAD NODE KIT — RETRO TERMINAL STYLE ========== */
+        .btn-download {
+            background: #000 !important;
+            color: var(--amber) !important;
+            border: 2px solid var(--amber) !important;
+            padding: 12px 20px !important;
+            font-size: 0.7rem !important;
+            letter-spacing: 2px;
+            text-shadow: 0 0 8px rgba(255,176,0,0.4) !important;
+            font-weight: 700 !important;
+            box-shadow: inset 0 0 15px rgba(255,176,0,0.05), 0 0 0 1px rgba(255,176,0,0.1) !important;
         }
         .btn-download:hover {
-            color: #fff !important;
-            box-shadow: 0 0 20px var(--cyan-glow), 0 0 40px rgba(0,229,255,0.15), inset 0 0 20px rgba(0,229,255,0.1) !important;
-            border-color: var(--cyan) !important;
-            text-shadow: 0 0 8px var(--cyan);
-            transform: translateY(-2px);
+            background: var(--amber) !important;
+            color: #000 !important;
+            border-color: var(--amber) !important;
+            box-shadow: 0 0 30px rgba(255,176,0,0.4), inset 0 0 10px rgba(0,0,0,0.2) !important;
+            text-shadow: none !important;
         }
-        .btn-download:hover::before { opacity: 1; }
-        .btn-download:active { transform: translateY(0); }
         .btn-downloading {
             pointer-events: none;
             opacity: 0.6;
@@ -315,15 +418,16 @@
             header { padding: 10px 12px; }
             h1 { font-size: 0.85rem; }
             .header-info { font-size: 0.5rem; }
+            #lamp { width: 18px; height: 18px; }
             #mesh-status { padding: 6px 12px; gap: 12px; font-size: 0.5rem; }
             #contacts-panel { padding: 8px 12px; }
             .contact-card { padding: 8px 12px; font-size: 0.6rem; }
             main { padding: 10px; gap: 8px; }
-            .msg { padding: 10px 12px; font-size: 0.8rem; border-radius: 8px; }
+            .msg { padding: 10px 12px; font-size: 0.8rem; max-width: 95%; }
             footer { padding: 10px 12px; gap: 8px; }
-            input { padding: 10px 12px; font-size: 0.75rem; }
-            button { padding: 10px 16px; font-size: 0.7rem; }
-            .btn-download { font-size: 0.6rem !important; padding: 8px 14px !important; }
+            input { padding: 12px 14px; font-size: 0.75rem; }
+            button { padding: 14px 18px; font-size: 0.75rem; }
+            .btn-download { font-size: 0.6rem !important; padding: 10px 14px !important; }
             #reg-box { margin: 10vh 12px; padding: 30px 20px; }
             #reg-box h2 { font-size: 1.1rem; }
         }
@@ -333,6 +437,9 @@
     </style>
 </head>
 <body>
+    <!-- Matrix rain background -->
+    <canvas id="matrix-rain"></canvas>
+
     <div id="reg-box" style="display:none">
         <h2>📟 PAGER v6.5</h2>
         <p>ANONYMOUS MESH NETWORK ENTRY<br>Генерация временного SSID для связи</p>
@@ -346,7 +453,10 @@
                 <h1>📟 PAGER v6.5</h1>
                 <div class="header-info" id="my-id">OWNER: LOADING...</div>
             </div>
-            <div id="lamp"></div>
+            <div id="lamp-container">
+                <div id="lamp"></div>
+                <span class="lamp-label">RX</span>
+            </div>
         </header>
 
         <div id="mesh-status">
@@ -369,7 +479,7 @@
             <div class="input-group actions">
                 <button onclick="send()">📡 TRANSMIT</button>
                 <button class="btn-small" onclick="logout()">LOGOUT</button>
-                <button class="btn-small" onclick="loadContacts()" style="color:var(--neon)!important">↻ SCAN</button>
+                <button class="btn-small" onclick="loadContacts()" style="color:var(--green)!important">↻ SCAN</button>
                 <button class="btn-download" id="dl-kit-btn" onclick="downloadNodeKit()">⬇ NODE KIT</button>
             </div>
         </footer>
@@ -381,6 +491,103 @@
         let mySsId = localStorage.getItem('pager_ss_id');
         let ws = null;
 
+        // ========== MATRIX RAIN (lightweight) ==========
+        (function initMatrixRain() {
+            const canvas = document.getElementById('matrix-rain');
+            const ctx = canvas.getContext('2d');
+            let cols, drops;
+            const chars = 'アァイィウヴエェオカキクケコサシスセソタチツテト0123456789ABCDEF';
+            const fontSize = 14;
+
+            function resize() {
+                canvas.width = window.innerWidth;
+                canvas.height = window.innerHeight;
+                cols = Math.floor(canvas.width / fontSize);
+                drops = new Array(cols).fill(1).map(() => Math.random() * canvas.height / fontSize | 0);
+            }
+
+            function draw() {
+                ctx.fillStyle = 'rgba(10,10,10,0.06)';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+                ctx.fillStyle = '#00ff00';
+                ctx.font = fontSize + 'px monospace';
+                for (let i = 0; i < cols; i++) {
+                    const char = chars[Math.random() * chars.length | 0];
+                    ctx.fillText(char, i * fontSize, drops[i] * fontSize);
+                    if (drops[i] * fontSize > canvas.height && Math.random() > 0.975) {
+                        drops[i] = 0;
+                    }
+                    drops[i]++;
+                }
+            }
+
+            resize();
+            window.addEventListener('resize', resize);
+            setInterval(draw, 80);
+        })();
+
+        // ========== TYPEWRITER EFFECT ==========
+        function typewriterAppend(container, text, isHtml) {
+            const div = document.createElement('div');
+            div.className = 'msg';
+            const meta = container.querySelector('.msg:last-child');
+            const contentDiv = document.createElement('div');
+            contentDiv.className = 'text-content';
+            div.appendChild(contentDiv);
+
+            if (isHtml) {
+                // Extract meta and text from HTML
+                const tmp = document.createElement('div');
+                tmp.innerHTML = text;
+                const metaEl = tmp.querySelector('.meta');
+                if (metaEl) {
+                    const metaDiv = document.createElement('div');
+                    metaDiv.className = 'meta';
+                    metaDiv.textContent = metaEl.textContent;
+                    div.insertBefore(metaDiv, contentDiv);
+                    metaEl.remove();
+                }
+                const textContent = tmp.textContent.trim();
+                animateText(contentDiv, textContent, div);
+            } else {
+                animateText(contentDiv, text, div);
+            }
+            return div;
+        }
+
+        function animateText(el, text, msgDiv) {
+            let i = 0;
+            const speed = 18;
+            function type() {
+                if (i < text.length) {
+                    el.textContent += text.charAt(i);
+                    i++;
+                    setTimeout(type, speed);
+                } else {
+                    msgDiv.classList.add('typing-done');
+                }
+            }
+            type();
+        }
+
+        // ========== LAMP LED FADE ==========
+        function lampFlash() {
+            lamp.classList.remove('fade-out');
+            lamp.classList.add('active');
+            clearTimeout(lamp._fadeTimer);
+            lamp._fadeTimer = setTimeout(() => {
+                lamp.classList.remove('active');
+                lamp.classList.add('fade-out');
+                setTimeout(() => lamp.classList.remove('fade-out'), 1800);
+            }, 800);
+        }
+
+        // ========== AUTO-SCROLL ==========
+        function scrollToBottom() {
+            msgs.scrollTop = msgs.scrollHeight;
+        }
+
+        // ========== REGISTRATION ==========
         async function registerAnon() {
             const btn = event.target;
             btn.disabled = true;
@@ -403,6 +610,7 @@
             }
         }
 
+        // ========== CONTACTS ==========
         async function loadContacts() {
             const panel = document.getElementById('contacts-panel');
             panel.innerHTML = '<span class="empty-contacts loading">⏳ SCANNING MESH...</span>';
@@ -430,6 +638,7 @@
             }
         }
 
+        // ========== MESH STATUS ==========
         async function loadMeshStatus() {
             try {
                 const res = await fetch('/mesh/status');
@@ -442,6 +651,7 @@
             } catch(e) {}
         }
 
+        // ========== DOWNLOAD NODE KIT ==========
         async function downloadNodeKit() {
             const btn = document.getElementById('dl-kit-btn');
             btn.classList.add('btn-downloading');
@@ -472,6 +682,7 @@
             }
         }
 
+        // ========== APP INIT ==========
         function initApp() {
             document.getElementById('reg-box').style.display = 'none';
             document.getElementById('app-ui').style.display = 'flex';
@@ -482,22 +693,31 @@
             setInterval(loadMeshStatus, 30000);
         }
 
+        // ========== WEBSOCKET ==========
         function connectWS() {
             if (ws) ws.close();
             ws = new WebSocket(`ws://${location.host}/ws/${mySsId}`);
             ws.onmessage = (e) => {
                 const d = JSON.parse(e.data);
-                lamp.classList.add('active');
-                setTimeout(() => lamp.classList.remove('active'), 2500);
+                lampFlash();
                 const div = document.createElement('div');
                 div.className = 'msg inbound';
-                div.innerHTML = `<div class="meta">[${new Date().toLocaleTimeString()}] FROM: ${d.from_ss || 'UNKNOWN'}</div>${d.text}`;
-                msgs.prepend(div);
+                const metaDiv = document.createElement('div');
+                metaDiv.className = 'meta';
+                metaDiv.textContent = `[${new Date().toLocaleTimeString()}] FROM: ${d.from_ss || 'UNKNOWN'}`;
+                div.appendChild(metaDiv);
+                const textDiv = document.createElement('div');
+                textDiv.className = 'text-content';
+                div.appendChild(textDiv);
+                msgs.appendChild(div);
+                animateText(textDiv, d.text, div);
+                scrollToBottom();
             };
             ws.onclose = () => { setTimeout(connectWS, 5000); };
             ws.onerror = () => { ws.close(); };
         }
 
+        // ========== SEND MESSAGE ==========
         async function send() {
             const text = document.getElementById('payload').value.trim();
             const target = document.getElementById('target').value.trim();
@@ -511,9 +731,17 @@
                 if (res.ok) {
                     const data = await res.json();
                     const div = document.createElement('div');
-                    div.className = 'msg';
-                    div.innerHTML = `<div class="meta">[${new Date().toLocaleTimeString()}] TO: ${target} | ${data.route || 'sent'}</div>${text}`;
-                    msgs.prepend(div);
+                    div.className = 'msg outbound';
+                    const metaDiv = document.createElement('div');
+                    metaDiv.className = 'meta';
+                    metaDiv.textContent = `[${new Date().toLocaleTimeString()}] TO: ${target} | ${data.route || 'sent'}`;
+                    div.appendChild(metaDiv);
+                    const textDiv = document.createElement('div');
+                    textDiv.className = 'text-content';
+                    div.appendChild(textDiv);
+                    msgs.appendChild(div);
+                    animateText(textDiv, text, div);
+                    scrollToBottom();
                     document.getElementById('payload').value = '';
                 }
             } catch(e) {}

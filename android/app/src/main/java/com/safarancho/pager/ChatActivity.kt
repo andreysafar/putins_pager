@@ -31,7 +31,9 @@ class ChatActivity : AppCompatActivity() {
         NotificationHelper.clearNotification(this, contactSS)
 
         binding.tvChatWith.text = contactName
-        binding.rvMessages.layoutManager = LinearLayoutManager(this)
+        binding.rvMessages.layoutManager = LinearLayoutManager(this).apply {
+            stackFromEnd = true
+        }
 
         binding.btnSend.setOnClickListener { sendMessage() }
         binding.btnBack.setOnClickListener { finish() }
@@ -107,8 +109,8 @@ class ChatActivity : AppCompatActivity() {
                         from_ss = mySS, to_ss = contactSS,
                         text = text, created_at = java.time.Instant.now().toString()
                     )
-                    messages.add(0, msg)
-                    binding.rvMessages.adapter?.notifyItemInserted(0)
+                    messages.add(msg)
+                    binding.rvMessages.adapter?.notifyItemInserted(messages.size - 1)
                 }
             } catch (e: Exception) {
                 runOnUiThread { Toast.makeText(this, "Ошибка: ${e.message}", Toast.LENGTH_SHORT).show() }
