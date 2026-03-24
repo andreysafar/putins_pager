@@ -66,22 +66,53 @@ def get_athletes():
         print(f"Mongo error: {e}")
         return []
 
-# --- WebSocket manager ---
+# --- WebSocket manager with presence ---
 class WSManager:
     def __init__(self):
         self.connections: dict[str, set[WebSocket]] = {}
+        self.last_ping: dict[str, float] = {}  # ss_id -> timestamp of last ping
     async def connect(self, ss_id: str, ws: WebSocket):
         await ws.accept()
         self.connections.setdefault(ss_id, set()).add(ws)
+        self.last_ping[ss_id] = time.time()
     def disconnect(self, ss_id: str, ws: WebSocket):
         if ss_id in self.connections:
             self.connections[ss_id].discard(ws)
+            if not self.connections[ss_id]:
+                del self.connections[ss_id]
+                # Keep last_ping for zombie detection
+    def update_ping(self, ss_id: str):
+        self.last_ping[ss_id] = time.time()
+    def get_status(self, ss_id: str) -> str:
+        """online (<30s), zombie (30s-5min), offline (>5min), killed (no data)."""
+        ts = self.last_ping.get(ss_id)
+        if ts is None:
+            return 'offline'
+        elapsed = time.time() - ts
+        if elapsed < 30:
+            return 'online'
+        elif elapsed < 300:  # 5 minutes
+            return 'zombie'
+        else:
+            return 'killed'
+    def get_all_presence(self) -> list:
+        """Return presence for all known SSIDs."""
+        all_ssids = set(self.connections.keys()) | set(self.last_ping.keys())
+        return [{"ss_id": sid, "status": self.get_status(sid)} for sid in all_ssids]
     async def send_to(self, ss_id: str, data: dict):
         for ws in list(self.connections.get(ss_id, [])):
             try:
                 await ws.send_json(data)
             except:
                 self.disconnect(ss_id, ws)
+    async def broadcast(self, data: dict):
+        """Send to all connected clients."""
+        for ss_id, wss in list(self.connections.items()):
+            for ws in list(wss):
+                try:
+                    await ws.send_json(data)
+                except:
+                    self.disconnect(ss_id, ws)
 
 ws_mgr = WSManager()
 
@@ -253,12 +284,25 @@ def generate_ssid() -> str:
 async def start_mesh_tasks(app):
     app.state.mesh_task = asyncio.create_task(mesh_ping_loop())
 
+async def presence_cleanup_loop():
+    """Periodically clean stale presence entries and broadcast updates."""
+    while True:
+        await asyncio.sleep(60)
+        # Remove entries older than 10 minutes
+        cutoff = time.time() - 600
+        to_remove = [sid for sid, ts in ws_mgr.last_ping.items() if ts < cutoff]
+        for sid in to_remove:
+            if sid not in ws_mgr.connections:
+                del ws_mgr.last_ping[sid]
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     init_db()
-    task = asyncio.create_task(mesh_ping_loop())
+    mesh_task = asyncio.create_task(mesh_ping_loop())
+    presence_task = asyncio.create_task(presence_cleanup_loop())
     yield
-    task.cancel()
+    mesh_task.cancel()
+    presence_task.cancel()
 
 app = FastAPI(lifespan=lifespan)
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
@@ -359,15 +403,42 @@ async def ws_endpoint(ws: WebSocket, ss_id: str):
     try:
         while True:
             data = await ws.receive_text()
-            # Forward to target if structured
             try:
                 msg = json.loads(data)
-                if "target" in msg and "text" in msg:
+                msg_type = msg.get("type", "")
+
+                if msg_type == "ping":
+                    # Client heartbeat
+                    ws_mgr.update_ping(ss_id)
+                    # Broadcast updated presence to all clients
+                    await ws_mgr.broadcast({
+                        "type": "presence",
+                        "contacts": ws_mgr.get_all_presence()
+                    })
+
+                elif msg_type == "get_presence":
+                    # Client requesting current presence data
+                    await ws.send_json({
+                        "type": "presence",
+                        "contacts": ws_mgr.get_all_presence()
+                    })
+
+                elif "target" in msg and "text" in msg:
+                    # Forward message
                     await send_message(MessageReq(text=msg["text"], target=msg["target"], from_ss=ss_id))
-            except:
+
+            except json.JSONDecodeError:
                 pass
     except WebSocketDisconnect:
         ws_mgr.disconnect(ss_id, ws)
+        # Broadcast updated presence (this client is now offline/zombie)
+        try:
+            await ws_mgr.broadcast({
+                "type": "presence",
+                "contacts": ws_mgr.get_all_presence()
+            })
+        except:
+            pass
 
 # --- Mesh Endpoints ---
 

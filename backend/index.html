@@ -3,757 +3,1175 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>PAGER v6.5 | MESH NETWORK</title>
-    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700;800&display=swap" rel="stylesheet">
+    <title>PAGER v7.0 | MESH NETWORK</title>
+    <link href="https://fonts.googleapis.com/css2?family=VT323&family=Share+Tech+Mono&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
     <style>
         :root {
-            --bg: #0a0a0a;
-            --green: #00ff00;
-            --green-glow: rgba(0,255,0,0.5);
-            --green-dim: rgba(0,255,0,0.12);
-            --green-dark: #0a3a0a;
-            --cyan: #00ccff;
-            --cyan-glow: rgba(0,204,255,0.4);
-            --orange: #ff8800;
-            --orange-glow: rgba(255,136,0,0.4);
-            --amber: #ffb000;
-            --text: #b0ffb0;
-            --dim: #4a6a4a;
-            --card: #0d1a0d;
-            --surface: #070e07;
-            --border: #1a3a1a;
-            --scanline: rgba(0,255,0,0.03);
+            /* Pager LCD palette */
+            --lcd-bg: #c5d1a0;
+            --lcd-dark: #2a3a1a;
+            --lcd-text: #1a2a0a;
+            --lcd-border: #3a4a2a;
+            --lcd-glow: rgba(100,140,60,0.3);
+            /* Body palette */
+            --body-bg: #d8d0c4;
+            --body-dark: #b0a898;
+            --body-light: #e8e2d8;
+            --shadow: #888;
+            /* Status colors */
+            --online: #00aa44;
+            --offline: #999;
+            --zombie: #cc9900;
+            --killed: #cc0000;
+            /* Accent */
+            --accent: #0066cc;
+            --amber: #cc8800;
         }
 
-        * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'JetBrains Mono', monospace; }
+        * { box-sizing: border-box; margin: 0; padding: 0; }
 
-        /* === CRT SCANLINES OVERLAY === */
-        body::after {
+        body {
+            font-family: 'Share Tech Mono', 'JetBrains Mono', monospace;
+            background: var(--body-bg);
+            background-image:
+                linear-gradient(45deg, #ccc8bc 25%, transparent 25%),
+                linear-gradient(-45deg, #ccc8bc 25%, transparent 25%),
+                linear-gradient(45deg, transparent 75%, #ccc8bc 75%),
+                linear-gradient(-45deg, transparent 75%, #ccc8bc 75%);
+            background-size: 4px 4px;
+            display: flex;
+            justify-content: center;
+            align-items: flex-start;
+            min-height: 100vh;
+            padding: 12px;
+            color: var(--lcd-dark);
+        }
+
+        /* ========== PAGER HOUSING ========== */
+        #pager-housing {
+            width: 100%;
+            max-width: 420px;
+            background: linear-gradient(180deg, #3a3a3a 0%, #2a2a2a 30%, #222 100%);
+            border-radius: 18px 18px 12px 12px;
+            padding: 8px;
+            box-shadow:
+                0 8px 32px rgba(0,0,0,0.5),
+                inset 0 1px 0 rgba(255,255,255,0.08),
+                inset 0 -2px 0 rgba(0,0,0,0.3);
+            position: relative;
+        }
+        #pager-housing::before {
             content: '';
-            position: fixed;
+            position: absolute;
+            top: -4px;
+            left: 20%;
+            right: 20%;
+            height: 8px;
+            background: linear-gradient(90deg, #555, #666, #555);
+            border-radius: 0 0 6px 6px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.3);
+        }
+
+        /* ========== BRAND STRIP ========== */
+        .brand-strip {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 6px 14px 8px;
+            color: #888;
+            font-size: 0.55rem;
+            letter-spacing: 2px;
+            text-transform: uppercase;
+        }
+        .brand-strip .model {
+            color: #aaa;
+            font-family: 'VT323', monospace;
+            font-size: 0.75rem;
+            letter-spacing: 3px;
+        }
+
+        /* ========== LCD SCREEN ========== */
+        .lcd-screen {
+            background: var(--lcd-bg);
+            border: 3px solid #1a1a1a;
+            border-radius: 6px;
+            box-shadow:
+                inset 0 2px 8px rgba(0,0,0,0.3),
+                inset 0 0 20px rgba(100,140,60,0.15),
+                0 2px 4px rgba(0,0,0,0.2);
+            margin: 0 4px;
+            overflow: hidden;
+            position: relative;
+        }
+        .lcd-screen::after {
+            content: '';
+            position: absolute;
             inset: 0;
             background: repeating-linear-gradient(
                 0deg,
                 transparent,
-                transparent 2px,
-                var(--scanline) 2px,
-                var(--scanline) 4px
+                transparent 1px,
+                rgba(0,0,0,0.03) 1px,
+                rgba(0,0,0,0.03) 2px
             );
             pointer-events: none;
-            z-index: 9999;
+            z-index: 5;
         }
 
-        /* === MATRIX RAIN CANVAS === */
-        #matrix-rain {
-            position: fixed;
-            inset: 0;
-            z-index: 0;
-            opacity: 0.08;
-            pointer-events: none;
-        }
-
-        /* === SCROLLBAR === */
-        ::-webkit-scrollbar { width: 6px; }
-        ::-webkit-scrollbar-track { background: var(--bg); }
-        ::-webkit-scrollbar-thumb { background: var(--green-dark); border: 1px solid var(--green-dim); }
-        ::-webkit-scrollbar-thumb:hover { background: var(--green); box-shadow: 0 0 8px var(--green-glow); }
-
-        body {
-            background: var(--bg);
-            color: var(--text);
-            display: flex;
-            flex-direction: column;
-            height: 100vh;
-            overflow: hidden;
-            position: relative;
-            background-image:
-                radial-gradient(ellipse at 30% 50%, rgba(0,255,0,0.04) 0%, transparent 50%),
-                radial-gradient(ellipse at 70% 20%, rgba(0,255,0,0.02) 0%, transparent 50%);
-        }
-
-        /* ========== REGISTRATION ========== */
-        #reg-box {
-            background: linear-gradient(180deg, #0d1a0d 0%, #050a05 100%);
-            padding: 40px 30px;
-            border-radius: 4px;
-            margin: 15vh 16px;
-            text-align: center;
-            box-shadow: 0 0 60px rgba(0,0,0,0.9), inset 0 0 30px rgba(0,255,0,0.02);
-            border: 2px solid var(--border);
-            animation: fadeInUp 0.6s ease-out;
-            position: relative;
-            z-index: 1;
-        }
-        #reg-box::before {
-            content: '';
-            position: absolute;
-            inset: 4px;
-            border: 1px solid var(--green-dim);
-            border-radius: 2px;
-            pointer-events: none;
-        }
-        #reg-box h2 {
-            color: var(--green);
-            margin-bottom: 10px;
-            font-size: 1.4rem;
-            text-shadow: 0 0 20px var(--green-glow), 0 0 40px rgba(0,255,0,0.3);
-            animation: textFlicker 4s ease-in-out infinite;
-        }
-        #reg-box p { font-size: 0.75rem; color: var(--text); margin-bottom: 24px; line-height: 1.6; }
-        #reg-box .sub { font-size: 0.55rem; color: var(--dim); margin-top: 20px; letter-spacing: 2px; }
-
-        @keyframes textFlicker {
-            0%, 100% { opacity: 1; }
-            92% { opacity: 1; }
-            93% { opacity: 0.8; }
-            94% { opacity: 1; }
-            96% { opacity: 0.9; }
-            97% { opacity: 1; }
-        }
-
-        /* ========== HEADER ========== */
-        header {
-            padding: 14px 16px;
-            background: rgba(5,10,5,0.92);
-            backdrop-filter: blur(10px);
-            border-bottom: 2px solid var(--green-dark);
+        /* ========== STATUS BAR ========== */
+        .status-bar {
+            background: var(--lcd-dark);
+            color: var(--lcd-bg);
+            padding: 4px 10px;
+            font-size: 0.55rem;
             display: flex;
             justify-content: space-between;
             align-items: center;
-            position: relative;
-            z-index: 10;
+            letter-spacing: 1px;
         }
-        header::after {
+        .status-bar .ss-id {
+            font-family: 'VT323', monospace;
+            font-size: 0.7rem;
+        }
+        .status-bar .battery {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+        .battery-icon {
+            width: 16px; height: 8px;
+            border: 1px solid var(--lcd-bg);
+            border-radius: 1px;
+            position: relative;
+        }
+        .battery-icon::after {
             content: '';
             position: absolute;
-            bottom: -2px;
-            left: 0;
-            width: 100%;
-            height: 2px;
-            background: linear-gradient(90deg, transparent, var(--green), transparent);
-            animation: headerGlow 3s ease-in-out infinite;
+            right: -3px;
+            top: 2px;
+            width: 2px;
+            height: 3px;
+            background: var(--lcd-bg);
+            border-radius: 0 1px 1px 0;
         }
-        @keyframes headerGlow {
-            0%, 100% { opacity: 0.3; }
-            50% { opacity: 1; }
-        }
-        h1 { font-size: 1rem; color: var(--green); text-shadow: 0 0 10px var(--green-glow); }
-        .header-info { font-size: 0.55rem; color: var(--dim); margin-top: 2px; }
-
-        /* === 7-SEGMENT LAMP === */
-        #lamp-container {
-            position: relative;
-            width: 50px;
-            height: 28px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-        }
-        #lamp {
-            width: 24px; height: 24px;
-            border-radius: 50%;
-            background: #0a1a0a;
-            border: 2px solid #1a3a1a;
-            box-shadow: inset 0 0 8px rgba(0,0,0,0.8);
-            transition: all 0.15s ease;
-            position: relative;
-        }
-        #lamp.active {
-            background: var(--green);
-            border-color: var(--green);
-            box-shadow: 0 0 15px var(--green), 0 0 30px var(--green-glow), 0 0 60px rgba(0,255,0,0.2), inset 0 0 5px rgba(255,255,255,0.3);
-        }
-        #lamp.fade-out {
-            transition: all 1.8s ease-out;
-            background: #1a3a1a;
-            border-color: #2a4a2a;
-            box-shadow: 0 0 4px rgba(0,255,0,0.15);
-        }
-        .lamp-label {
-            font-size: 0.4rem;
-            color: var(--dim);
-            position: absolute;
-            bottom: -10px;
-            letter-spacing: 1px;
-            white-space: nowrap;
+        .battery-fill {
+            height: 100%;
+            background: var(--lcd-bg);
+            width: 70%;
+            border-radius: 1px;
         }
 
-        /* ========== MESH STATUS BAR ========== */
-        #mesh-status {
-            background: var(--surface);
-            border-bottom: 1px solid var(--border);
-            padding: 8px 16px;
-            font-size: 0.55rem;
-            color: var(--dim);
+        /* ========== CHAT TABS ========== */
+        .chat-tabs {
             display: flex;
-            gap: 20px;
-            flex-wrap: wrap;
-        }
-        .status-item { display: flex; align-items: center; gap: 6px; }
-        .status-dot { width: 7px; height: 7px; border-radius: 50%; }
-        .dot-green { background: var(--green); box-shadow: 0 0 6px var(--green-glow); }
-        .dot-orange { background: var(--amber); box-shadow: 0 0 6px rgba(255,176,0,0.5); }
-        .dot-red { background: #ff3333; box-shadow: 0 0 6px rgba(255,51,51,0.5); }
-
-        /* ========== CONTACTS PANEL ========== */
-        #contacts-panel {
-            background: rgba(5,10,5,0.6);
-            border-bottom: 1px solid var(--border);
-            padding: 12px 16px;
-            display: flex;
-            gap: 10px;
+            background: var(--lcd-dark);
+            border-bottom: 2px solid #0a0a0a;
             overflow-x: auto;
-            min-height: 60px;
-            align-items: center;
-            flex-wrap: nowrap;
             scrollbar-width: none;
         }
-        #contacts-panel::-webkit-scrollbar { display: none; }
-        .contact-card {
-            background: var(--card);
-            border: 1px solid var(--border);
-            padding: 10px 16px;
-            border-radius: 2px;
-            font-size: 0.7rem;
+        .chat-tabs::-webkit-scrollbar { display: none; }
+        .chat-tab {
+            padding: 6px 12px;
+            font-size: 0.55rem;
+            color: var(--lcd-bg);
+            cursor: pointer;
+            white-space: nowrap;
+            border-bottom: 2px solid transparent;
+            opacity: 0.6;
+            transition: all 0.2s;
+            position: relative;
+            font-family: 'Share Tech Mono', monospace;
+            background: none;
+            border-top: none;
+            border-left: none;
+            border-right: none;
+            letter-spacing: 0;
+            text-shadow: none;
+            box-shadow: none;
+        }
+        .chat-tab:hover { opacity: 0.9; }
+        .chat-tab.active {
+            opacity: 1;
+            border-bottom-color: var(--lcd-bg);
+            background: rgba(197,209,160,0.08);
+        }
+        .chat-tab .tab-status {
+            width: 6px; height: 6px;
+            border-radius: 50%;
+            display: inline-block;
+            margin-right: 4px;
+            vertical-align: middle;
+        }
+        .tab-new-badge {
+            background: var(--killed);
+            color: #fff;
+            font-size: 0.45rem;
+            padding: 1px 4px;
+            border-radius: 6px;
+            margin-left: 4px;
+            display: none;
+        }
+
+        /* ========== CONTACTS SCROLL (for adding new chats) ========== */
+        .contacts-bar {
+            display: flex;
+            gap: 6px;
+            padding: 6px 8px;
+            overflow-x: auto;
+            background: rgba(42,58,26,0.15);
+            border-bottom: 1px solid rgba(42,58,26,0.2);
+            scrollbar-width: none;
+        }
+        .contacts-bar::-webkit-scrollbar { display: none; }
+        .contact-chip {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            padding: 4px 10px;
+            background: rgba(42,58,26,0.12);
+            border: 1px solid rgba(42,58,26,0.25);
+            border-radius: 10px;
+            font-size: 0.5rem;
             white-space: nowrap;
             cursor: pointer;
-            color: var(--green);
-            transition: all 0.2s ease;
+            color: var(--lcd-dark);
+            transition: all 0.2s;
             flex-shrink: 0;
-            position: relative;
-            text-shadow: 0 0 6px var(--green-glow);
+            font-family: 'Share Tech Mono', monospace;
         }
-        .contact-card:hover {
-            border-color: var(--green);
-            box-shadow: 0 0 16px var(--green-dim), inset 0 0 20px rgba(0,255,0,0.05);
-            background: #0f2a0f;
+        .contact-chip:hover {
+            background: rgba(42,58,26,0.25);
+            border-color: var(--lcd-dark);
         }
-        .contact-card .ssid { font-size: 0.5rem; color: var(--dim); margin-top: 3px; }
+        .contact-chip.active-chat {
+            background: rgba(42,58,26,0.3);
+            border-color: var(--lcd-dark);
+        }
+        .status-indicator {
+            width: 7px; height: 7px;
+            border-radius: 50%;
+            flex-shrink: 0;
+        }
+        .status-online { background: var(--online); box-shadow: 0 0 4px var(--online); }
+        .status-offline { background: var(--offline); }
+        .status-zombie { background: var(--zombie); box-shadow: 0 0 4px var(--zombie); }
+        .status-killed { background: var(--killed); box-shadow: 0 0 4px var(--killed); }
 
-        /* ========== MAIN CHAT ========== */
-        main {
-            flex: 1;
+        /* ========== MESSAGES AREA ========== */
+        .messages-area {
+            height: 320px;
             overflow-y: auto;
-            padding: 16px;
+            padding: 10px;
             display: flex;
             flex-direction: column;
-            gap: 12px;
-            position: relative;
-            z-index: 1;
+            gap: 8px;
+            scrollbar-width: thin;
+            scrollbar-color: var(--lcd-dark) transparent;
         }
-        .msg {
-            background: var(--card);
-            padding: 14px 16px;
-            border-radius: 2px;
-            border-left: 3px solid var(--dim);
-            font-size: 0.85rem;
-            line-height: 1.6;
-            animation: msgIn 0.3s ease-out;
+        .messages-area::-webkit-scrollbar { width: 4px; }
+        .messages-area::-webkit-scrollbar-track { background: transparent; }
+        .messages-area::-webkit-scrollbar-thumb { background: var(--lcd-dark); border-radius: 2px; }
+
+        .msg-bubble {
+            max-width: 85%;
+            padding: 8px 10px;
+            font-size: 0.75rem;
+            line-height: 1.5;
             position: relative;
-            max-width: 90%;
+            animation: bubbleIn 0.25s ease-out;
+            font-family: 'VT323', monospace;
+            letter-spacing: 0.5px;
         }
-        .msg::after {
-            content: '█';
+        .msg-bubble::after {
+            content: '▌';
             animation: cursorBlink 1s step-end infinite;
-            color: var(--green);
-            margin-left: 2px;
+            margin-left: 1px;
             font-size: 0.8em;
         }
-        .msg.typing-done::after { display: none; }
+        .msg-bubble.typing-done::after { display: none; }
+
+        .msg-bubble.inbound {
+            align-self: flex-start;
+            background: rgba(42,58,26,0.2);
+            border: 1px solid rgba(42,58,26,0.35);
+            border-radius: 2px 8px 8px 2px;
+        }
+        .msg-bubble.outbound {
+            align-self: flex-end;
+            background: rgba(0,102,204,0.12);
+            border: 1px solid rgba(0,102,204,0.25);
+            border-radius: 8px 2px 2px 8px;
+        }
+        .msg-meta {
+            font-size: 0.45rem;
+            opacity: 0.6;
+            margin-bottom: 3px;
+            font-family: 'Share Tech Mono', monospace;
+            color: var(--lcd-dark);
+        }
+        .msg-text {
+            word-break: break-word;
+            white-space: pre-wrap;
+        }
+
+        /* File attachment display */
+        .msg-attachment {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            margin-top: 6px;
+            padding: 4px 8px;
+            background: rgba(0,0,0,0.08);
+            border-radius: 4px;
+            font-size: 0.5rem;
+            cursor: pointer;
+        }
+        .msg-attachment:hover { background: rgba(0,0,0,0.12); }
 
         @keyframes cursorBlink {
             0%, 100% { opacity: 1; }
             50% { opacity: 0; }
         }
-
-        /* Inbound: cyan accent */
-        .msg.inbound {
-            border-left-color: var(--cyan);
-            box-shadow: -4px 0 20px rgba(0,204,255,0.1);
-            align-self: flex-start;
-        }
-        .msg.inbound .meta { color: var(--cyan); }
-
-        /* Outbound: orange accent */
-        .msg.outbound {
-            border-left-color: var(--orange);
-            box-shadow: -4px 0 20px rgba(255,136,0,0.1);
-            align-self: flex-end;
-            background: #1a120a;
-        }
-        .msg.outbound .meta { color: var(--orange); }
-
-        .msg .meta {
-            font-size: 0.55rem;
-            margin-bottom: 6px;
-            letter-spacing: 0.5px;
-            opacity: 0.8;
-        }
-        .msg .text-content {
-            overflow: hidden;
-            white-space: pre-wrap;
-            word-break: break-word;
-        }
-        @keyframes msgIn {
-            from { opacity: 0; transform: translateY(8px); }
+        @keyframes bubbleIn {
+            from { opacity: 0; transform: translateY(6px); }
             to { opacity: 1; transform: translateY(0); }
         }
 
-        /* ========== FOOTER ========== */
-        footer {
-            padding: 14px 16px;
-            background: rgba(5,10,5,0.92);
-            backdrop-filter: blur(10px);
-            border-top: 1px solid var(--border);
+        .empty-chat {
             display: flex;
             flex-direction: column;
-            gap: 10px;
-            position: relative;
-            z-index: 10;
+            align-items: center;
+            justify-content: center;
+            height: 100%;
+            font-size: 0.65rem;
+            color: rgba(42,58,26,0.4);
+            text-align: center;
+            gap: 8px;
         }
-        .input-group { display: flex; gap: 10px; align-items: center; }
-        input {
-            background: #070e07;
-            border: 1px solid var(--border);
-            color: var(--green);
-            padding: 14px 16px;
-            border-radius: 2px;
-            outline: none;
+        .empty-chat .pager-icon {
+            font-size: 2rem;
+            opacity: 0.3;
+        }
+
+        /* ========== INPUT AREA ========== */
+        .input-row {
+            display: flex;
+            gap: 4px;
+            padding: 8px 10px;
+            background: rgba(42,58,26,0.08);
+            border-top: 1px solid rgba(42,58,26,0.15);
+            align-items: stretch;
+        }
+        .lcd-input {
             flex: 1;
-            font-size: 0.85rem;
-            font-family: 'JetBrains Mono', monospace;
-            transition: border-color 0.3s, box-shadow 0.3s;
-            text-shadow: 0 0 4px var(--green-dim);
-        }
-        input:focus {
-            border-color: var(--green);
-            box-shadow: 0 0 12px var(--green-dim), inset 0 0 8px rgba(0,255,0,0.03);
-        }
-        input::placeholder { color: #1a3a1a; }
-
-        /* === BIG PHONE-KEY BUTTONS === */
-        button {
-            background: var(--green-dark);
-            color: var(--green);
-            border: 2px solid var(--border);
-            padding: 16px 24px;
+            background: rgba(42,58,26,0.08);
+            border: 1px solid rgba(42,58,26,0.3);
+            color: var(--lcd-dark);
+            padding: 10px 12px;
+            font-size: 0.75rem;
+            font-family: 'VT323', monospace;
+            outline: none;
             border-radius: 2px;
-            font-weight: 800;
-            cursor: pointer;
-            text-transform: uppercase;
-            font-family: 'JetBrains Mono', monospace;
-            font-size: 0.9rem;
-            transition: all 0.15s ease;
-            text-shadow: 0 0 6px var(--green-glow);
             letter-spacing: 1px;
-            position: relative;
-            box-shadow: inset 0 1px 0 rgba(0,255,0,0.1), 0 2px 4px rgba(0,0,0,0.5);
+            caret-color: var(--lcd-dark);
         }
-        button:hover {
-            background: var(--green);
-            color: #000;
-            border-color: var(--green);
-            box-shadow: 0 0 20px var(--green-glow), 0 0 40px rgba(0,255,0,0.15);
+        .lcd-input:focus {
+            border-color: var(--lcd-dark);
+            background: rgba(42,58,26,0.12);
+        }
+        .lcd-input::placeholder {
+            color: rgba(42,58,26,0.35);
+            font-size: 0.65rem;
+        }
+
+        .btn-attach {
+            width: 38px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: rgba(42,58,26,0.12);
+            border: 1px solid rgba(42,58,26,0.3);
+            border-radius: 2px;
+            cursor: pointer;
+            font-size: 1.1rem;
+            transition: all 0.15s;
+            padding: 0;
+            color: var(--lcd-dark);
             text-shadow: none;
+            box-shadow: none;
+            letter-spacing: 0;
+            font-family: inherit;
+            font-weight: normal;
+            text-transform: none;
         }
-        button:active {
-            transform: translateY(2px);
-            box-shadow: inset 0 2px 4px rgba(0,0,0,0.5);
+        .btn-attach:hover {
+            background: rgba(42,58,26,0.25);
+            border-color: var(--lcd-dark);
         }
-        .btn-small {
-            padding: 10px 16px !important;
-            font-size: 0.6rem !important;
-            background: var(--card) !important;
-            color: var(--dim) !important;
-            border: 1px solid var(--border) !important;
-            text-shadow: none !important;
+        .btn-send {
+            width: 42px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            background: var(--lcd-dark);
+            color: var(--lcd-bg);
+            border: 2px solid #0a0a0a;
+            border-radius: 3px;
+            cursor: pointer;
+            font-size: 0.5rem;
+            font-weight: 700;
+            letter-spacing: 0;
+            line-height: 1.2;
+            padding: 4px;
+            transition: all 0.1s;
+            text-shadow: none;
+            box-shadow: inset 0 1px 0 rgba(255,255,255,0.05);
+            font-family: 'Share Tech Mono', monospace;
+            text-transform: uppercase;
         }
-        .btn-small:hover {
-            border-color: var(--green) !important;
-            color: var(--green) !important;
-            background: var(--green-dark) !important;
-            text-shadow: 0 0 6px var(--green-glow) !important;
+        .btn-send:hover {
+            background: #4a5a3a;
+            box-shadow: 0 0 8px rgba(100,140,60,0.3);
+        }
+        .btn-send:active {
+            transform: scale(0.95);
+        }
+        .btn-send .arrow { font-size: 1.1rem; }
+
+        /* ========== TARGET INPUT (in LCD area) ========== */
+        .target-row {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            padding: 4px 10px;
+            background: rgba(42,58,26,0.1);
+            border-bottom: 1px solid rgba(42,58,26,0.15);
+            font-size: 0.5rem;
+            color: rgba(42,58,26,0.5);
+        }
+        .target-row input {
+            flex: 1;
+            background: transparent;
+            border: none;
+            color: var(--lcd-dark);
+            font-family: 'VT323', monospace;
+            font-size: 0.7rem;
+            outline: none;
+            padding: 2px 0;
+            letter-spacing: 1px;
+        }
+        .target-row input::placeholder { color: rgba(42,58,26,0.3); }
+
+        /* ========== BOTTOM TECH BAR ========== */
+        .tech-bar {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 10px 14px 6px;
+        }
+        .tech-buttons {
+            display: flex;
+            gap: 8px;
+        }
+        .btn-tech {
+            font-size: 0.5rem;
+            color: #666;
+            background: linear-gradient(180deg, #444, #333);
+            border: 1px solid #222;
+            padding: 6px 12px;
+            border-radius: 3px;
+            cursor: pointer;
+            letter-spacing: 1px;
+            font-family: 'Share Tech Mono', monospace;
+            text-shadow: none;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.3), inset 0 1px 0 rgba(255,255,255,0.05);
+            font-weight: normal;
+            text-transform: uppercase;
+            transition: all 0.15s;
+        }
+        .btn-tech:hover {
+            color: #aaa;
+            background: linear-gradient(180deg, #555, #444);
+        }
+        .btn-tech:active {
+            transform: translateY(1px);
+            box-shadow: 0 1px 2px rgba(0,0,0,0.3);
+        }
+        .btn-tech.btn-download {
+            color: var(--amber);
+            border-color: #553300;
+        }
+        .btn-tech.btn-download:hover {
+            color: #ffaa00;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.3), 0 0 8px rgba(200,130,0,0.2);
         }
 
-        /* ========== DOWNLOAD NODE KIT — RETRO TERMINAL STYLE ========== */
-        .btn-download {
-            background: #000 !important;
-            color: var(--amber) !important;
-            border: 2px solid var(--amber) !important;
-            padding: 12px 20px !important;
-            font-size: 0.7rem !important;
+        /* ========== MESH INDICATOR ========== */
+        .mesh-dot {
+            width: 6px; height: 6px;
+            border-radius: 50%;
+            display: inline-block;
+        }
+        .mesh-info {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 0.45rem;
+            color: #666;
+            letter-spacing: 1px;
+        }
+
+        /* ========== REGISTRATION SCREEN ========== */
+        #reg-screen {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 60vh;
+            padding: 20px;
+            text-align: center;
+        }
+        .reg-pager-icon {
+            font-size: 3.5rem;
+            margin-bottom: 16px;
+            filter: drop-shadow(0 4px 8px rgba(0,0,0,0.3));
+        }
+        .reg-title {
+            font-family: 'VT323', monospace;
+            font-size: 1.8rem;
+            color: var(--lcd-dark);
+            letter-spacing: 4px;
+            margin-bottom: 8px;
+        }
+        .reg-subtitle {
+            font-size: 0.65rem;
+            color: #888;
+            margin-bottom: 24px;
+            line-height: 1.6;
+            letter-spacing: 1px;
+        }
+        .reg-btn {
+            background: var(--lcd-dark);
+            color: var(--lcd-bg);
+            border: 2px solid #0a0a0a;
+            padding: 14px 32px;
+            border-radius: 4px;
+            font-family: 'VT323', monospace;
+            font-size: 1.1rem;
+            letter-spacing: 3px;
+            cursor: pointer;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.3), inset 0 1px 0 rgba(255,255,255,0.05);
+            transition: all 0.15s;
+            text-shadow: none;
+            font-weight: normal;
+            text-transform: uppercase;
+        }
+        .reg-btn:hover {
+            background: #4a5a3a;
+            box-shadow: 0 4px 16px rgba(0,0,0,0.3), 0 0 20px rgba(100,140,60,0.2);
+        }
+        .reg-btn:active { transform: translateY(2px); }
+        .reg-footer {
+            font-size: 0.45rem;
+            color: #aaa;
+            margin-top: 20px;
             letter-spacing: 2px;
-            text-shadow: 0 0 8px rgba(255,176,0,0.4) !important;
-            font-weight: 700 !important;
-            box-shadow: inset 0 0 15px rgba(255,176,0,0.05), 0 0 0 1px rgba(255,176,0,0.1) !important;
-        }
-        .btn-download:hover {
-            background: var(--amber) !important;
-            color: #000 !important;
-            border-color: var(--amber) !important;
-            box-shadow: 0 0 30px rgba(255,176,0,0.4), inset 0 0 10px rgba(0,0,0,0.2) !important;
-            text-shadow: none !important;
-        }
-        .btn-downloading {
-            pointer-events: none;
-            opacity: 0.6;
-            animation: downloadPulse 1s ease-in-out infinite;
-        }
-        @keyframes downloadPulse {
-            0%, 100% { opacity: 0.6; }
-            50% { opacity: 1; }
         }
 
-        /* ========== UTILITIES ========== */
-        .empty-contacts { color: var(--dim); font-size: 0.6rem; padding: 10px; text-align: center; }
-        .loading { animation: blink 1s infinite; }
-        @keyframes blink { 50% { opacity: 0.3; } }
-        @keyframes fadeInUp {
-            from { opacity: 0; transform: translateY(30px); }
-            to { opacity: 1; transform: translateY(0); }
+        /* ========== LAMP ========== */
+        .rx-lamp {
+            display: flex;
+            align-items: center;
+            gap: 4px;
         }
+        .lamp-dot {
+            width: 8px; height: 8px;
+            border-radius: 50%;
+            background: #1a1a1a;
+            border: 1px solid #333;
+            transition: all 0.2s;
+        }
+        .lamp-dot.active {
+            background: var(--online);
+            border-color: var(--online);
+            box-shadow: 0 0 6px var(--online), 0 0 12px rgba(0,170,68,0.3);
+        }
+        .lamp-dot.fade {
+            transition: all 1.5s ease-out;
+            background: #2a3a1a;
+            border-color: #3a4a2a;
+            box-shadow: none;
+        }
+        .lamp-label { font-size: 0.4rem; color: #888; letter-spacing: 1px; }
 
-        /* ========== MOBILE-FIRST RESPONSIVE ========== */
+        /* ========== WS STATUS (zombie indicator) ========== */
+        .ws-status {
+            font-size: 0.4rem;
+            padding: 2px 6px;
+            border-radius: 3px;
+            letter-spacing: 1px;
+        }
+        .ws-connected { color: var(--online); }
+        .ws-reconnecting { color: var(--zombie); animation: blink 1s infinite; }
+        .ws-disconnected { color: var(--killed); }
+        @keyframes blink { 50% { opacity: 0.4; } }
+
+        /* ========== HIDDEN FILE INPUT ========== */
+        #file-input { display: none; }
+
+        /* ========== MOBILE ========== */
         @media (max-width: 480px) {
-            header { padding: 10px 12px; }
-            h1 { font-size: 0.85rem; }
-            .header-info { font-size: 0.5rem; }
-            #lamp { width: 18px; height: 18px; }
-            #mesh-status { padding: 6px 12px; gap: 12px; font-size: 0.5rem; }
-            #contacts-panel { padding: 8px 12px; }
-            .contact-card { padding: 8px 12px; font-size: 0.6rem; }
-            main { padding: 10px; gap: 8px; }
-            .msg { padding: 10px 12px; font-size: 0.8rem; max-width: 95%; }
-            footer { padding: 10px 12px; gap: 8px; }
-            input { padding: 12px 14px; font-size: 0.75rem; }
-            button { padding: 14px 18px; font-size: 0.75rem; }
-            .btn-download { font-size: 0.6rem !important; padding: 10px 14px !important; }
-            #reg-box { margin: 10vh 12px; padding: 30px 20px; }
-            #reg-box h2 { font-size: 1.1rem; }
-        }
-        @media (min-width: 768px) {
-            .input-group.actions { justify-content: flex-start; }
+            body { padding: 4px; }
+            #pager-housing { border-radius: 12px 12px 8px 8px; }
+            .messages-area { height: 280px; }
+            .brand-strip { padding: 4px 10px 6px; font-size: 0.5rem; }
+            .reg-title { font-size: 1.4rem; }
         }
     </style>
 </head>
 <body>
-    <!-- Matrix rain background -->
-    <canvas id="matrix-rain"></canvas>
 
-    <div id="reg-box" style="display:none">
-        <h2>📟 PAGER v6.5</h2>
-        <p>ANONYMOUS MESH NETWORK ENTRY<br>Генерация временного SSID для связи</p>
-        <button onclick="registerAnon()">⚡ ACQUIRE SSID</button>
-        <div class="sub">SPORTS-PUNK EDITION 🦾⚙️</div>
+<!-- ========== REGISTRATION ========== -->
+<div id="reg-screen" style="display:none">
+    <div class="reg-pager-icon">📟</div>
+    <div class="reg-title">PAGER v7.0</div>
+    <div class="reg-subtitle">
+        ANONYMOUS MESH NETWORK<br>
+        Нажми для получения SSID
     </div>
+    <button class="reg-btn" onclick="registerAnon()">⚡ ACQUIRE SSID</button>
+    <div class="reg-footer">SPORTS-PUNK EDITION 🦾⚙️</div>
+</div>
 
-    <div id="app-ui" style="display:none; flex-direction:column; height:100vh">
-        <header>
-            <div>
-                <h1>📟 PAGER v6.5</h1>
-                <div class="header-info" id="my-id">OWNER: LOADING...</div>
-            </div>
-            <div id="lamp-container">
-                <div id="lamp"></div>
+<!-- ========== PAGER HOUSING ========== -->
+<div id="pager-housing" style="display:none">
+
+    <!-- Brand -->
+    <div class="brand-strip">
+        <span class="model">📟 SAFARANCHO PAGER</span>
+        <span>
+            <span class="rx-lamp">
                 <span class="lamp-label">RX</span>
-            </div>
-        </header>
-
-        <div id="mesh-status">
-            <div class="status-item"><div class="status-dot dot-green"></div> <span id="mesh-node">NODE: ---</span></div>
-            <div class="status-item"><div class="status-dot dot-orange" id="mesh-peer-dot"></div> <span id="mesh-peers">PEERS: 0</span></div>
-            <div class="status-item"><span id="mesh-routes">ROUTES: 0</span></div>
-        </div>
-
-        <div id="contacts-panel">
-            <span class="empty-contacts loading">⏳ LOADING CONTACTS...</span>
-        </div>
-
-        <main id="messages"></main>
-
-        <footer>
-            <div class="input-group">
-                <input type="text" id="target" placeholder="TARGET SSID (ss-xxxx-pager)">
-            </div>
-            <input type="text" id="payload" placeholder="ENCRYPTED MESSAGE..." onkeydown="if(event.key==='Enter')send()">
-            <div class="input-group actions">
-                <button onclick="send()">📡 TRANSMIT</button>
-                <button class="btn-small" onclick="logout()">LOGOUT</button>
-                <button class="btn-small" onclick="loadContacts()" style="color:var(--green)!important">↻ SCAN</button>
-                <button class="btn-download" id="dl-kit-btn" onclick="downloadNodeKit()">⬇ NODE KIT</button>
-            </div>
-        </footer>
+                <div class="lamp-dot" id="lamp"></div>
+            </span>
+        </span>
     </div>
 
-    <script>
-        const msgs = document.getElementById('messages');
-        const lamp = document.getElementById('lamp');
-        let mySsId = localStorage.getItem('pager_ss_id');
-        let ws = null;
+    <!-- LCD Screen -->
+    <div class="lcd-screen">
+        <!-- Status bar -->
+        <div class="status-bar">
+            <span class="ss-id" id="my-id">ID: ---</span>
+            <span class="ws-status ws-connected" id="ws-status">● ONLINE</span>
+            <span class="battery">
+                <div class="battery-icon"><div class="battery-fill"></div></div>
+            </span>
+        </div>
 
-        // ========== MATRIX RAIN (lightweight) ==========
-        (function initMatrixRain() {
-            const canvas = document.getElementById('matrix-rain');
-            const ctx = canvas.getContext('2d');
-            let cols, drops;
-            const chars = 'アァイィウヴエェオカキクケコサシスセソタチツテト0123456789ABCDEF';
-            const fontSize = 14;
+        <!-- Chat tabs -->
+        <div class="chat-tabs" id="chat-tabs">
+            <!-- Dynamic tabs here -->
+        </div>
 
-            function resize() {
-                canvas.width = window.innerWidth;
-                canvas.height = window.innerHeight;
-                cols = Math.floor(canvas.width / fontSize);
-                drops = new Array(cols).fill(1).map(() => Math.random() * canvas.height / fontSize | 0);
+        <!-- Contacts bar -->
+        <div class="contacts-bar" id="contacts-bar">
+            <span style="font-size:0.5rem; color:rgba(42,58,26,0.4); padding:4px;">⏳ SCANNING...</span>
+        </div>
+
+        <!-- Target line -->
+        <div class="target-row">
+            <span>TO:</span>
+            <input type="text" id="target" placeholder="ss-xxxx-pager">
+        </div>
+
+        <!-- Messages -->
+        <div class="messages-area" id="messages">
+            <div class="empty-chat">
+                <div class="pager-icon">📟</div>
+                <div>Выбери контакт и напиши сообщение</div>
+            </div>
+        </div>
+
+        <!-- Input -->
+        <div class="input-row">
+            <input type="text" class="lcd-input" id="payload" placeholder="Введите сообщение..." onkeydown="if(event.key==='Enter')send()">
+            <button class="btn-attach" onclick="document.getElementById('file-input').click()" title="Прикрепить файл">📎</button>
+            <button class="btn-send" onclick="send()" title="Отправить">
+                <span class="arrow">▶</span>
+                <span>SEND</span>
+            </button>
+        </div>
+        <input type="file" id="file-input" onchange="handleFileAttach(this)" multiple>
+    </div>
+
+    <!-- Tech buttons -->
+    <div class="tech-bar">
+        <div class="tech-buttons">
+            <button class="btn-tech btn-download" id="dl-kit-btn" onclick="downloadNodeKit()">⬇ NODE KIT</button>
+            <button class="btn-tech" onclick="logout()">⏻ LOGOUT</button>
+            <button class="btn-tech" onclick="loadContacts()">↻ SCAN</button>
+        </div>
+        <div class="mesh-info">
+            <span class="mesh-dot" style="background:var(--online)" id="mesh-dot"></span>
+            <span id="mesh-info-text">NODE: ---</span>
+        </div>
+    </div>
+</div>
+
+<script>
+    // ========== STATE ==========
+    const msgs = document.getElementById('messages');
+    const lamp = document.getElementById('lamp');
+    let mySsId = localStorage.getItem('pager_ss_id');
+    let ws = null;
+    let wsStatus = 'disconnected'; // connected | reconnecting | disconnected
+    let allContacts = [];          // [{ss_id, display_name, status}]
+    let chatTabs = {};             // ss_id -> {name, messages[], unread}
+    let activeChatId = null;       // currently selected chat tab
+    let pingInterval = null;
+    let reconnectAttempts = 0;
+    const MAX_RECONNECT_DELAY = 30000;
+
+    // ========== CONTACT STATUS TRACKING ==========
+    // Server tracks last_seen per WebSocket connection
+    // Client pings every 10s; server marks online/zombie/killed based on last_ping
+    const contactStatuses = {}; // ss_id -> 'online' | 'offline' | 'zombie' | 'killed'
+
+    function getStatusColor(status) {
+        switch(status) {
+            case 'online': return 'var(--online)';
+            case 'zombie': return 'var(--zombie)';
+            case 'killed': return 'var(--killed)';
+            default: return 'var(--offline)';
+        }
+    }
+    function getStatusClass(status) {
+        switch(status) {
+            case 'online': return 'status-online';
+            case 'zombie': return 'status-zombie';
+            case 'killed': return 'status-killed';
+            default: return 'status-offline';
+        }
+    }
+
+    // ========== REGISTRATION ==========
+    async function registerAnon() {
+        const btn = event.target;
+        btn.disabled = true;
+        btn.textContent = 'SYNCING...';
+        try {
+            const res = await fetch('/register', {
+                method: 'POST',
+                body: JSON.stringify({label: 'web-anon'}),
+                headers: {'Content-Type': 'application/json'}
+            });
+            const data = await res.json();
+            if (data.ssid || data.ss_id) {
+                mySsId = data.ssid || data.ss_id;
+                localStorage.setItem('pager_ss_id', mySsId);
+                initApp();
             }
+        } catch(e) {
+            btn.disabled = false;
+            btn.textContent = '⚡ RETRY';
+        }
+    }
 
-            function draw() {
-                ctx.fillStyle = 'rgba(10,10,10,0.06)';
-                ctx.fillRect(0, 0, canvas.width, canvas.height);
-                ctx.fillStyle = '#00ff00';
-                ctx.font = fontSize + 'px monospace';
-                for (let i = 0; i < cols; i++) {
-                    const char = chars[Math.random() * chars.length | 0];
-                    ctx.fillText(char, i * fontSize, drops[i] * fontSize);
-                    if (drops[i] * fontSize > canvas.height && Math.random() > 0.975) {
-                        drops[i] = 0;
-                    }
-                    drops[i]++;
-                }
-            }
+    // ========== LAMP ==========
+    function lampFlash() {
+        lamp.classList.remove('fade');
+        lamp.classList.add('active');
+        clearTimeout(lamp._fadeTimer);
+        lamp._fadeTimer = setTimeout(() => {
+            lamp.classList.remove('active');
+            lamp.classList.add('fade');
+            setTimeout(() => lamp.classList.remove('fade'), 1500);
+        }, 600);
+    }
 
-            resize();
-            window.addEventListener('resize', resize);
-            setInterval(draw, 80);
-        })();
+    // ========== SCROLL ==========
+    function scrollToBottom() {
+        msgs.scrollTop = msgs.scrollHeight;
+    }
 
-        // ========== TYPEWRITER EFFECT ==========
-        function typewriterAppend(container, text, isHtml) {
-            const div = document.createElement('div');
-            div.className = 'msg';
-            const meta = container.querySelector('.msg:last-child');
-            const contentDiv = document.createElement('div');
-            contentDiv.className = 'text-content';
-            div.appendChild(contentDiv);
+    // ========== CONTACTS ==========
+    async function loadContacts() {
+        const bar = document.getElementById('contacts-bar');
+        bar.innerHTML = '<span style="font-size:0.5rem; color:rgba(42,58,26,0.4); padding:4px;" class="loading">⏳ SCANNING MESH...</span>';
+        try {
+            const res = await fetch('/contacts');
+            const athletes = await res.json();
+            allContacts = athletes.map(a => ({
+                ss_id: a.ss_id,
+                display_name: (a.display_name || a.first_name || a.username || a.name || 'USER').toUpperCase(),
+                status: contactStatuses[a.ss_id] || 'offline'
+            }));
+            renderContactsBar();
+            renderChatTabs();
+        } catch(e) {
+            bar.innerHTML = '<span style="font-size:0.5rem; color:var(--killed); padding:4px;">⚠ CONTACTS OFFLINE</span>';
+        }
+    }
 
-            if (isHtml) {
-                // Extract meta and text from HTML
-                const tmp = document.createElement('div');
-                tmp.innerHTML = text;
-                const metaEl = tmp.querySelector('.meta');
-                if (metaEl) {
-                    const metaDiv = document.createElement('div');
-                    metaDiv.className = 'meta';
-                    metaDiv.textContent = metaEl.textContent;
-                    div.insertBefore(metaDiv, contentDiv);
-                    metaEl.remove();
-                }
-                const textContent = tmp.textContent.trim();
-                animateText(contentDiv, textContent, div);
+    function renderContactsBar() {
+        const bar = document.getElementById('contacts-bar');
+        if (!allContacts.length) {
+            bar.innerHTML = '<span style="font-size:0.5rem; color:rgba(42,58,26,0.4); padding:4px;">NO CONTACTS</span>';
+            return;
+        }
+        bar.innerHTML = allContacts.map(c => {
+            const isActive = chatTabs[c.ss_id] ? 'active-chat' : '';
+            return `<div class="contact-chip ${isActive}" onclick="openChat('${c.ss_id}')">
+                <span class="status-indicator ${getStatusClass(c.status)}"></span>
+                <span>${c.display_name}</span>
+            </div>`;
+        }).join('');
+    }
+
+    // ========== CHAT TABS ==========
+    function openChat(ssId) {
+        const contact = allContacts.find(c => c.ss_id === ssId);
+        const name = contact ? contact.display_name : ssId;
+        if (!chatTabs[ssId]) {
+            chatTabs[ssId] = { name, messages: [], unread: 0 };
+        }
+        activeChatId = ssId;
+        document.getElementById('target').value = ssId;
+        renderChatTabs();
+        renderMessages();
+    }
+
+    function renderChatTabs() {
+        const tabsEl = document.getElementById('chat-tabs');
+        const tabIds = Object.keys(chatTabs);
+        if (!tabIds.length) {
+            tabsEl.innerHTML = '<div class="chat-tab" style="opacity:0.4;cursor:default">NO ACTIVE CHATS</div>';
+            return;
+        }
+        tabsEl.innerHTML = tabIds.map(ssId => {
+            const tab = chatTabs[ssId];
+            const contact = allContacts.find(c => c.ss_id === ssId);
+            const status = contact ? contact.status : 'offline';
+            const isActive = ssId === activeChatId ? 'active' : '';
+            const badge = tab.unread > 0 ? `<span class="tab-new-badge">${tab.unread}</span>` : '';
+            return `<div class="chat-tab ${isActive}" onclick="switchTab('${ssId}')">
+                <span class="tab-status" style="background:${getStatusColor(status)}"></span>
+                ${tab.name}${badge}
+            </div>`;
+        }).join('');
+    }
+
+    function switchTab(ssId) {
+        activeChatId = ssId;
+        if (chatTabs[ssId]) chatTabs[ssId].unread = 0;
+        document.getElementById('target').value = ssId;
+        renderChatTabs();
+        renderMessages();
+    }
+
+    function renderMessages() {
+        if (!activeChatId || !chatTabs[activeChatId]) {
+            msgs.innerHTML = '<div class="empty-chat"><div class="pager-icon">📟</div><div>Выбери контакт</div></div>';
+            return;
+        }
+        const chat = chatTabs[activeChatId];
+        if (!chat.messages.length) {
+            msgs.innerHTML = `<div class="empty-chat"><div class="pager-icon">📟</div><div>Нет сообщений с ${chat.name}</div></div>`;
+            return;
+        }
+        msgs.innerHTML = chat.messages.map(m => m.html).join('');
+        scrollToBottom();
+    }
+
+    // ========== TYPEWRITER ==========
+    function typewriterText(text, isOutbound) {
+        const div = document.createElement('div');
+        div.className = `msg-bubble ${isOutbound ? 'outbound' : 'inbound'}`;
+        const metaDiv = document.createElement('div');
+        metaDiv.className = 'msg-meta';
+        const textDiv = document.createElement('div');
+        textDiv.className = 'msg-text';
+        div.appendChild(metaDiv);
+        div.appendChild(textDiv);
+        return { el: div, metaEl: metaDiv, textEl: textDiv };
+    }
+
+    function animateText(el, text, callback) {
+        let i = 0;
+        const speed = 15;
+        function type() {
+            if (i < text.length) {
+                el.textContent += text.charAt(i);
+                i++;
+                setTimeout(type, speed);
             } else {
-                animateText(contentDiv, text, div);
+                el.parentElement.classList.add('typing-done');
+                if (callback) callback();
             }
-            return div;
         }
+        type();
+    }
 
-        function animateText(el, text, msgDiv) {
-            let i = 0;
-            const speed = 18;
-            function type() {
-                if (i < text.length) {
-                    el.textContent += text.charAt(i);
-                    i++;
-                    setTimeout(type, speed);
-                } else {
-                    msgDiv.classList.add('typing-done');
+    // ========== WEBSOCKET ==========
+    function updateWsStatus(status) {
+        wsStatus = status;
+        const el = document.getElementById('ws-status');
+        el.className = 'ws-status';
+        switch(status) {
+            case 'connected':
+                el.classList.add('ws-connected');
+                el.textContent = '● ONLINE';
+                reconnectAttempts = 0;
+                break;
+            case 'reconnecting':
+                el.classList.add('ws-reconnecting');
+                el.textContent = '⟳ RECONNECTING...';
+                break;
+            case 'disconnected':
+                el.classList.add('ws-disconnected');
+                el.textContent = '✖ ZOMBIE';
+                break;
+        }
+    }
+
+    function connectWS() {
+        if (ws) { try { ws.close(); } catch(e) {} }
+        updateWsStatus('reconnecting');
+
+        const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
+        ws = new WebSocket(`${protocol}//${location.host}/ws/${mySsId}`);
+
+        ws.onopen = () => {
+            updateWsStatus('connected');
+            // Start ping every 10 seconds
+            if (pingInterval) clearInterval(pingInterval);
+            pingInterval = setInterval(() => {
+                if (ws && ws.readyState === WebSocket.OPEN) {
+                    ws.send(JSON.stringify({ type: 'ping', ts: Date.now() }));
                 }
-            }
-            type();
-        }
-
-        // ========== LAMP LED FADE ==========
-        function lampFlash() {
-            lamp.classList.remove('fade-out');
-            lamp.classList.add('active');
-            clearTimeout(lamp._fadeTimer);
-            lamp._fadeTimer = setTimeout(() => {
-                lamp.classList.remove('active');
-                lamp.classList.add('fade-out');
-                setTimeout(() => lamp.classList.remove('fade-out'), 1800);
-            }, 800);
-        }
-
-        // ========== AUTO-SCROLL ==========
-        function scrollToBottom() {
-            msgs.scrollTop = msgs.scrollHeight;
-        }
-
-        // ========== REGISTRATION ==========
-        async function registerAnon() {
-            const btn = event.target;
-            btn.disabled = true;
-            btn.textContent = 'SYNCING...';
-            try {
-                const res = await fetch('/register', {
-                    method: 'POST',
-                    body: JSON.stringify({label: 'web-anon'}),
-                    headers: {'Content-Type': 'application/json'}
-                });
-                const data = await res.json();
-                if (data.ssid || data.ss_id) {
-                    mySsId = data.ssid || data.ss_id;
-                    localStorage.setItem('pager_ss_id', mySsId);
-                    initApp();
-                }
-            } catch(e) {
-                btn.disabled = false;
-                btn.textContent = '⚡ RETRY';
-            }
-        }
-
-        // ========== CONTACTS ==========
-        async function loadContacts() {
-            const panel = document.getElementById('contacts-panel');
-            panel.innerHTML = '<span class="empty-contacts loading">⏳ SCANNING MESH...</span>';
-            try {
-                const res = await fetch('/contacts');
-                const athletes = await res.json();
-                panel.innerHTML = '';
-                if (!athletes.length) {
-                    panel.innerHTML = '<span class="empty-contacts">NO CONTACTS FOUND — MESH EMPTY</span>';
-                    return;
-                }
-                athletes.forEach(a => {
-                    const card = document.createElement('div');
-                    card.className = 'contact-card';
-                    const name = (a.display_name || a.first_name || a.username || a.name || 'ATHLETE').toUpperCase();
-                    card.innerHTML = `${name}<div class="ssid">${a.ss_id}</div>`;
-                    card.onclick = () => {
-                        document.getElementById('target').value = a.ss_id;
-                        document.getElementById('payload').focus();
-                    };
-                    panel.appendChild(card);
-                });
-            } catch(e) {
-                panel.innerHTML = '<span class="empty-contacts">⚠ CONTACTS API OFFLINE</span>';
-            }
-        }
-
-        // ========== MESH STATUS ==========
-        async function loadMeshStatus() {
-            try {
-                const res = await fetch('/mesh/status');
-                const status = await res.json();
-                document.getElementById('mesh-node').textContent = `NODE: ${status.node_id}`;
-                document.getElementById('mesh-peers').textContent = `PEERS: ${status.online_peers}/${status.total_peers}`;
-                document.getElementById('mesh-routes').textContent = `ROUTES: ${status.known_routes}`;
-                const dot = document.getElementById('mesh-peer-dot');
-                dot.className = 'status-dot ' + (status.online_peers > 0 ? 'dot-green' : 'dot-orange');
-            } catch(e) {}
-        }
-
-        // ========== DOWNLOAD NODE KIT ==========
-        async function downloadNodeKit() {
-            const btn = document.getElementById('dl-kit-btn');
-            btn.classList.add('btn-downloading');
-            btn.textContent = '⏳ PACKING...';
-            try {
-                const res = await fetch('/download_node_kit');
-                if (!res.ok) throw new Error('HTTP ' + res.status);
-                const blob = await res.blob();
-                const url = URL.createObjectURL(blob);
-                const a = document.createElement('a');
-                a.href = url;
-                a.download = 'node_kit.tar.gz';
-                document.body.appendChild(a);
-                a.click();
-                a.remove();
-                URL.revokeObjectURL(url);
-                btn.textContent = '✅ DONE';
-                setTimeout(() => {
-                    btn.classList.remove('btn-downloading');
-                    btn.textContent = '⬇ NODE KIT';
-                }, 2000);
-            } catch(e) {
-                btn.textContent = '⚠ FAILED';
-                setTimeout(() => {
-                    btn.classList.remove('btn-downloading');
-                    btn.textContent = '⬇ NODE KIT';
-                }, 2000);
-            }
-        }
-
-        // ========== APP INIT ==========
-        function initApp() {
-            document.getElementById('reg-box').style.display = 'none';
-            document.getElementById('app-ui').style.display = 'flex';
-            document.getElementById('my-id').textContent = `ID: ${mySsId}`;
-            connectWS();
+            }, 10000);
+            // Refresh contacts on reconnect
             loadContacts();
             loadMeshStatus();
-            setInterval(loadMeshStatus, 30000);
-        }
+        };
 
-        // ========== WEBSOCKET ==========
-        function connectWS() {
-            if (ws) ws.close();
-            ws = new WebSocket(`ws://${location.host}/ws/${mySsId}`);
-            ws.onmessage = (e) => {
-                const d = JSON.parse(e.data);
-                lampFlash();
-                const div = document.createElement('div');
-                div.className = 'msg inbound';
-                const metaDiv = document.createElement('div');
-                metaDiv.className = 'meta';
-                metaDiv.textContent = `[${new Date().toLocaleTimeString()}] FROM: ${d.from_ss || 'UNKNOWN'}`;
-                div.appendChild(metaDiv);
-                const textDiv = document.createElement('div');
-                textDiv.className = 'text-content';
-                div.appendChild(textDiv);
-                msgs.appendChild(div);
-                animateText(textDiv, d.text, div);
-                scrollToBottom();
-            };
-            ws.onclose = () => { setTimeout(connectWS, 5000); };
-            ws.onerror = () => { ws.close(); };
-        }
-
-        // ========== SEND MESSAGE ==========
-        async function send() {
-            const text = document.getElementById('payload').value.trim();
-            const target = document.getElementById('target').value.trim();
-            if (!text || !target) return;
+        ws.onmessage = (e) => {
             try {
-                const res = await fetch('/message', {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({ text, target, from_ss: mySsId })
-                });
-                if (res.ok) {
-                    const data = await res.json();
-                    const div = document.createElement('div');
-                    div.className = 'msg outbound';
-                    const metaDiv = document.createElement('div');
-                    metaDiv.className = 'meta';
-                    metaDiv.textContent = `[${new Date().toLocaleTimeString()}] TO: ${target} | ${data.route || 'sent'}`;
-                    div.appendChild(metaDiv);
-                    const textDiv = document.createElement('div');
-                    textDiv.className = 'text-content';
-                    div.appendChild(textDiv);
-                    msgs.appendChild(div);
-                    animateText(textDiv, text, div);
-                    scrollToBottom();
-                    document.getElementById('payload').value = '';
+                const d = JSON.parse(e.data);
+
+                // Handle presence updates from server
+                if (d.type === 'presence') {
+                    d.contacts.forEach(c => {
+                        contactStatuses[c.ss_id] = c.status;
+                    });
+                    renderContactsBar();
+                    renderChatTabs();
+                    return;
+                }
+
+                // Regular message
+                const fromSs = d.from_ss || 'UNKNOWN';
+                const text = d.text || '';
+                lampFlash();
+
+                // Ensure chat tab exists
+                if (!chatTabs[fromSs]) {
+                    const contact = allContacts.find(c => c.ss_id === fromSs);
+                    const name = contact ? contact.display_name : fromSs;
+                    chatTabs[fromSs] = { name, messages: [], unread: 0 };
+                }
+
+                // Build message element
+                const { el, metaEl, textEl } = typewriterText(text, false);
+                metaEl.textContent = `[${new Date().toLocaleTimeString()}] FROM: ${fromSs}`;
+
+                // Store in chat
+                chatTabs[fromSs].messages.push({ html: el.outerHTML, text });
+
+                // If this chat is active, show it
+                if (activeChatId === fromSs) {
+                    msgs.appendChild(el);
+                    animateText(textEl, text, scrollToBottom);
+                } else {
+                    chatTabs[fromSs].unread++;
+                    renderChatTabs();
                 }
             } catch(e) {}
+        };
+
+        ws.onclose = () => {
+            updateWsStatus('disconnected');
+            if (pingInterval) clearInterval(pingInterval);
+            // Exponential backoff reconnect
+            reconnectAttempts++;
+            const delay = Math.min(5000 * Math.pow(1.5, reconnectAttempts - 1), MAX_RECONNECT_DELAY);
+            setTimeout(connectWS, delay);
+        };
+
+        ws.onerror = () => {
+            try { ws.close(); } catch(e) {}
+        };
+    }
+
+    // ========== SEND MESSAGE ==========
+    async function send() {
+        const text = document.getElementById('payload').value.trim();
+        const target = document.getElementById('target').value.trim();
+        if (!text || !target) return;
+
+        // Ensure chat tab
+        if (!chatTabs[target]) {
+            const contact = allContacts.find(c => c.ss_id === target);
+            const name = contact ? contact.display_name : target;
+            chatTabs[target] = { name, messages: [], unread: 0 };
+        }
+        if (activeChatId !== target) {
+            openChat(target);
         }
 
-        function logout() {
-            localStorage.removeItem('pager_ss_id');
-            location.reload();
+        try {
+            const res = await fetch('/message', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ text, target, from_ss: mySsId })
+            });
+            if (res.ok) {
+                const data = await res.json();
+                const { el, metaEl, textEl } = typewriterText(text, true);
+                metaEl.textContent = `[${new Date().toLocaleTimeString()}] TO: ${target} | ${data.route || 'sent'}`;
+
+                // Store and display
+                chatTabs[target].messages.push({ html: el.outerHTML, text });
+                msgs.appendChild(el);
+                animateText(textEl, text, scrollToBottom);
+                document.getElementById('payload').value = '';
+            }
+        } catch(e) {}
+    }
+
+    // ========== FILE ATTACHMENT ==========
+    function handleFileAttach(input) {
+        const files = input.files;
+        if (!files.length) return;
+        const target = document.getElementById('target').value.trim();
+        if (!target) {
+            alert('Сначала выбери получателя');
+            input.value = '';
+            return;
         }
 
-        if (mySsId) initApp();
-        else document.getElementById('reg-box').style.display = 'block';
-    </script>
+        for (const file of files) {
+            // Show file as message
+            const fileText = `📎 ${file.name} (${(file.size/1024).toFixed(1)}KB)`;
+
+            if (!chatTabs[target]) {
+                const contact = allContacts.find(c => c.ss_id === target);
+                const name = contact ? contact.display_name : target;
+                chatTabs[target] = { name, messages: [], unread: 0 };
+            }
+
+            const div = document.createElement('div');
+            div.className = 'msg-bubble outbound typing-done';
+            const metaDiv = document.createElement('div');
+            metaDiv.className = 'msg-meta';
+            metaDiv.textContent = `[${new Date().toLocaleTimeString()}] TO: ${target} | FILE`;
+            const textDiv = document.createElement('div');
+            textDiv.className = 'msg-text';
+            textDiv.textContent = fileText;
+            const attachDiv = document.createElement('div');
+            attachDiv.className = 'msg-attachment';
+            attachDiv.textContent = `📎 ${file.name}`;
+            div.appendChild(metaDiv);
+            div.appendChild(textDiv);
+            div.appendChild(attachDiv);
+
+            chatTabs[target].messages.push({ html: div.outerHTML, text: fileText });
+
+            if (activeChatId === target) {
+                msgs.appendChild(div);
+                scrollToBottom();
+            }
+
+            // Send file info as message (actual file upload would need server endpoint)
+            fetch('/message', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({
+                    text: `[FILE: ${file.name}, ${(file.size/1024).toFixed(1)}KB]`,
+                    target,
+                    from_ss: mySsId
+                })
+            }).catch(() => {});
+        }
+        input.value = '';
+    }
+
+    // ========== MESH STATUS ==========
+    async function loadMeshStatus() {
+        try {
+            const res = await fetch('/mesh/status');
+            const status = await res.json();
+            document.getElementById('mesh-info-text').textContent =
+                `NODE: ${status.node_id.slice(0,10)} | ${status.online_peers}/${status.total_peers} PEERS`;
+            const dot = document.getElementById('mesh-dot');
+            dot.style.background = status.online_peers > 0 ? 'var(--online)' : 'var(--zombie)';
+        } catch(e) {}
+    }
+
+    // ========== DOWNLOAD NODE KIT ==========
+    async function downloadNodeKit() {
+        const btn = document.getElementById('dl-kit-btn');
+        btn.textContent = '⏳...';
+        btn.disabled = true;
+        try {
+            const res = await fetch('/download_node_kit');
+            if (!res.ok) throw new Error('HTTP ' + res.status);
+            const blob = await res.blob();
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'node_kit.tar.gz';
+            document.body.appendChild(a);
+            a.click();
+            a.remove();
+            URL.revokeObjectURL(url);
+            btn.textContent = '✅ DONE';
+            setTimeout(() => { btn.textContent = '⬇ NODE KIT'; btn.disabled = false; }, 2000);
+        } catch(e) {
+            btn.textContent = '⚠ FAIL';
+            setTimeout(() => { btn.textContent = '⬇ NODE KIT'; btn.disabled = false; }, 2000);
+        }
+    }
+
+    // ========== LOGOUT ==========
+    function logout() {
+        if (pingInterval) clearInterval(pingInterval);
+        if (ws) try { ws.close(); } catch(e) {}
+        localStorage.removeItem('pager_ss_id');
+        location.reload();
+    }
+
+    // ========== APP INIT ==========
+    function initApp() {
+        document.getElementById('reg-screen').style.display = 'none';
+        document.getElementById('pager-housing').style.display = 'block';
+        document.getElementById('my-id').textContent = `ID: ${mySsId}`;
+        connectWS();
+        loadContacts();
+        loadMeshStatus();
+        setInterval(loadMeshStatus, 30000);
+        // Refresh contact statuses periodically
+        setInterval(() => {
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                ws.send(JSON.stringify({ type: 'get_presence' }));
+            }
+        }, 15000);
+    }
+
+    // ========== BOOT ==========
+    if (mySsId) initApp();
+    else document.getElementById('reg-screen').style.display = 'flex';
+</script>
 </body>
 </html>
