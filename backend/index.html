@@ -211,6 +211,21 @@
             margin-left: 4px;
             display: none;
         }
+        .chat-tab .tab-close {
+            position: absolute;
+            right: 5px;
+            top: 50%;
+            transform: translateY(-50%);
+            cursor: pointer;
+            color: #cc4444;
+            font-size: 0.7rem;
+            line-height: 1;
+            opacity: 0;
+            transition: opacity 0.15s;
+            font-family: sans-serif;
+        }
+        .chat-tab:hover .tab-close { opacity: 1; }
+        .tab-close:hover { color: #ff2222; }
 
         /* ========== CONTACTS SCROLL (for adding new chats) ========== */
         .contacts-bar {
@@ -722,7 +737,7 @@
 
     <!-- Brand -->
     <div class="brand-strip">
-        <span class="model">📟 SAFARANCHO PAGER</span>
+        <span class="model">📟 SAFARANCHO PAGER <span id="brand-ssid" style="color:#00cc44;font-family:'VT323',monospace;font-size:0.7rem;"></span></span>
         <span>
             <span class="rx-lamp">
                 <span class="lamp-label">RX</span>
@@ -900,7 +915,7 @@
         }
         bar.innerHTML = allContacts.map(c => {
             const isActive = chatTabs[c.ss_id] ? 'active-chat' : '';
-            return `<div class="contact-chip ${isActive}" onclick="openChat('${c.ss_id}')">
+            return `<div class="contact-chip ${isActive}" onclick="openChat('${c.ss_id}')" title="${c.ss_id}">
                 <span class="status-indicator ${getStatusClass(c.status)}"></span>
                 <span>${c.display_name}</span>
             </div>`;
@@ -936,8 +951,26 @@
             return `<div class="chat-tab ${isActive}" onclick="switchTab('${ssId}')">
                 <span class="tab-status" style="background:${getStatusColor(status)}"></span>
                 ${tab.name}${badge}
+                <span class="tab-close" onclick="event.stopPropagation();closeTab('${ssId}')">×</span>
             </div>`;
         }).join('');
+    }
+
+    function closeTab(ssId) {
+        delete chatTabs[ssId];
+        if (activeChatId === ssId) {
+            activeChatId = null;
+            const remaining = Object.keys(chatTabs);
+            if (remaining.length) {
+                switchTab(remaining[0]);
+            } else {
+                renderChatTabs();
+                renderMessages();
+            }
+        } else {
+            renderChatTabs();
+            renderContactsBar();
+        }
     }
 
     function switchTab(ssId) {
@@ -1304,6 +1337,7 @@
         document.getElementById('reg-screen').style.display = 'none';
         document.getElementById('pager-housing').style.display = 'block';
         document.getElementById('my-id').textContent = `ID: ${mySsId}`;
+        document.getElementById('brand-ssid').textContent = `| SS-ID: ${mySsId}`;
         connectWS();
         loadContacts();
         loadMeshStatus();
