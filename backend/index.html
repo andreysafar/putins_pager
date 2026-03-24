@@ -764,7 +764,12 @@
             <!-- Dynamic tabs here -->
         </div>
 
-        <!-- Contacts bar -->
+        <!-- Contacts bar with search -->
+        <div class="target-row" style="background:rgba(42,58,26,0.08);">
+            <span>🔍</span>
+            <input type="text" id="contact-search" placeholder="Search contacts..." oninput="onContactSearch()" style="font-size:0.6rem;">
+            <button onclick="toggleShowAll()" id="btn-show-all" style="font-size:0.45rem;padding:2px 8px;background:rgba(42,58,26,0.15);border:1px solid rgba(42,58,26,0.3);border-radius:3px;color:var(--lcd-dark);cursor:pointer;font-family:'Share Tech Mono',monospace;" title="Toggle show all contacts">👁 ALL</button>
+        </div>
         <div class="contacts-bar" id="contacts-bar">
             <span style="font-size:0.5rem; color:rgba(42,58,26,0.4); padding:4px;">⏳ SCANNING...</span>
         </div>
@@ -827,6 +832,8 @@
     let pingInterval = null;
     let reconnectAttempts = 0;
     const MAX_RECONNECT_DELAY = 30000;
+    let showAllContacts = true; // show all by default, toggle to filter
+    let contactSearchQuery = '';
 
     // ========== CONTACT STATUS TRACKING ==========
     // Server tracks last_seen per WebSocket connection
@@ -916,17 +923,48 @@
 
     function renderContactsBar() {
         const bar = document.getElementById('contacts-bar');
-        if (!allContacts.length) {
+        let visible = allContacts;
+
+        // Filter by search query
+        if (contactSearchQuery) {
+            const q = contactSearchQuery.toLowerCase();
+            visible = visible.filter(c => {
+                const name = (c.display_name || '').toLowerCase();
+                const ssid = (c.ss_id || '').toLowerCase();
+                return name.includes(q) || ssid.includes(q);
+            });
+        } else if (!showAllContacts) {
+            // Show only contacts with active chats (have messages)
+            visible = visible.filter(c => {
+                const tab = chatTabs[c.ss_id];
+                return tab && tab.messages && tab.messages.length > 0;
+            });
+        }
+
+        if (!visible.length) {
             bar.innerHTML = '<span style="font-size:0.5rem; color:rgba(42,58,26,0.4); padding:4px;">NO CONTACTS</span>';
             return;
         }
-        bar.innerHTML = allContacts.map(c => {
+        bar.innerHTML = visible.map(c => {
             const isActive = chatTabs[c.ss_id] ? 'active-chat' : '';
             return `<div class="contact-chip ${isActive}" onclick="openChat('${c.ss_id}')" title="${c.ss_id}">
                 <span class="status-indicator ${getStatusClass(c.status)}"></span>
                 <span>${c.display_name}</span>
             </div>`;
         }).join('');
+    }
+
+    function onContactSearch() {
+        const input = document.getElementById('contact-search');
+        contactSearchQuery = (input.value || '').trim();
+        renderContactsBar();
+    }
+
+    function toggleShowAll() {
+        showAllContacts = !showAllContacts;
+        const btn = document.getElementById('btn-show-all');
+        btn.textContent = showAllContacts ? '🔒 ACTIVE' : '👁 ALL';
+        renderContactsBar();
     }
 
     // ========== CHAT TABS ==========

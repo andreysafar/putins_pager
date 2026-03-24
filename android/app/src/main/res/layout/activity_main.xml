@@ -104,6 +104,39 @@
                 style="?android:attr/borderlessButtonStyle" />
         </LinearLayout>
 
+        <!-- Search bar -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:padding="8dp"
+            android:gravity="center_vertical">
+
+            <EditText
+                android:id="@+id/etSearch"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:hint="🔍 SEARCH CONTACTS"
+                android:textColorHint="@color/text_muted"
+                android:textColor="@color/accent"
+                android:background="@drawable/input_matrix"
+                android:padding="10dp"
+                android:fontFamily="monospace"
+                android:textSize="13sp"
+                android:singleLine="true" />
+
+            <Button
+                android:id="@+id/btnShowAll"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="👁"
+                android:textSize="16sp"
+                android:textColor="@color/accent"
+                style="?android:attr/borderlessButtonStyle"
+                android:layout_marginStart="4dp" />
+        </LinearLayout>
+
         <androidx.recyclerview.widget.RecyclerView
             android:id="@+id/rvContacts"
             android:layout_width="match_parent"

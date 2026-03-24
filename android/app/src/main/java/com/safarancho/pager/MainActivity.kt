@@ -2,13 +2,18 @@ package com.safarancho.pager
 
 import android.content.Context
 import android.content.Intent
+import android.graphics.Canvas
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.text.Editable
+import android.text.TextWatcher
 import android.view.View
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
+import androidx.recyclerview.widget.ItemTouchHelper
 import androidx.recyclerview.widget.LinearLayoutManager
+import androidx.recyclerview.widget.RecyclerView
 import com.google.gson.Gson
 import com.safarancho.pager.databinding.ActivityMainBinding
 import okhttp3.*
@@ -26,8 +31,13 @@ class MainActivity : AppCompatActivity() {
     private val prefs by lazy { getSharedPreferences("pager_prefs", Context.MODE_PRIVATE) }
 
     private var contactsList: MutableList<Contact> = mutableListOf()
+    private var filteredList: MutableList<Contact> = mutableListOf()
     private var unreadMap: MutableMap<String, Int> = mutableMapOf()
     private var mySsId: String? = null
+    private var hiddenContacts: MutableSet<String> = mutableSetOf()
+    private var showAll: Boolean = false
+    private var searchQuery: String = ""
+    private val contactsWithMessages: MutableSet<String> = mutableSetOf()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -67,6 +77,7 @@ class MainActivity : AppCompatActivity() {
 
         binding.tvMyId.text = "SSID: $mySsId"
         setupRecyclerView()
+        setupSearch()
         refreshContacts()
         connectWebSocket(mySsId!!)
 
@@ -150,12 +161,80 @@ class MainActivity : AppCompatActivity() {
 
     private fun setupRecyclerView() {
         binding.rvContacts.layoutManager = LinearLayoutManager(this)
-        binding.rvContacts.adapter = ContactAdapter(contactsList, unreadMap) { contact ->
+        binding.rvContacts.adapter = ContactAdapter(filteredList, unreadMap) { contact ->
+            contactsWithMessages.add(contact.ss_id)
             val intent = Intent(this, ChatActivity::class.java)
             intent.putExtra("contact_ss_id", contact.ss_id)
             intent.putExtra("contact_name", contact.display_name)
             startActivity(intent)
         }
+
+        // Swipe left to delete (from UI only, not from database)
+        val swipeCallback = object : ItemTouchHelper.SimpleCallback(0, ItemTouchHelper.LEFT) {
+            override fun onMove(rv: RecyclerView, vh: RecyclerView.ViewHolder, t: RecyclerView.ViewHolder) = false
+
+            override fun onSwiped(vh: RecyclerView.ViewHolder, dir: Int) {
+                val pos = vh.adapterPosition
+                if (pos in filteredList.indices) {
+                    val contact = filteredList[pos]
+                    hiddenContacts.add(contact.ss_id)
+                    applyFilter()
+                    Toast.makeText(this@MainActivity, "${contact.display_name} СКРЫТ", Toast.LENGTH_SHORT).show()
+                }
+            }
+
+            override fun onChildDraw(c: Canvas, rv: RecyclerView, vh: RecyclerView.ViewHolder,
+                dX: Float, dY: Float, actionState: Int, isCurrentlyActive: Boolean) {
+                val itemView = vh.itemView
+                val alpha = 1f - Math.abs(dX) / itemView.width
+                itemView.alpha = alpha
+                super.onChildDraw(c, rv, vh, dX, dY, actionState, isCurrentlyActive)
+            }
+        }
+        ItemTouchHelper(swipeCallback).attachToRecyclerView(binding.rvContacts)
+    }
+
+    private fun setupSearch() {
+        binding.etSearch.addTextChangedListener(object : TextWatcher {
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
+            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {}
+            override fun afterTextChanged(s: Editable?) {
+                searchQuery = s?.toString()?.trim() ?: ""
+                applyFilter()
+            }
+        })
+
+        // Toggle show all / hide inactive
+        binding.btnShowAll.setOnClickListener {
+            showAll = !showAll
+            binding.btnShowAll.text = if (showAll) "🔒" else "👁"
+            applyFilter()
+        }
+    }
+
+    private fun applyFilter() {
+        filteredList.clear()
+        val query = searchQuery.lowercase()
+        for (contact in contactsList) {
+            // Hidden contacts only shown if search query is not empty
+            val isHidden = hiddenContacts.contains(contact.ss_id)
+            if (isHidden && query.isEmpty()) continue
+
+            // If not showing all and no search, only show contacts with messages
+            if (!showAll && query.isEmpty() && !isHidden) {
+                if (!contactsWithMessages.contains(contact.ss_id)) continue
+            }
+
+            // Search filter
+            if (query.isNotEmpty()) {
+                val name = contact.display_name.lowercase()
+                val ssid = contact.ss_id.lowercase()
+                if (!name.contains(query) && !ssid.contains(query)) continue
+            }
+
+            filteredList.add(contact)
+        }
+        binding.rvContacts.adapter?.notifyDataSetChanged()
     }
 
     private fun refreshContacts() {
@@ -178,7 +257,7 @@ class MainActivity : AppCompatActivity() {
                     runOnUiThread {
                         contactsList.clear()
                         contactsList.addAll(athletes)
-                        binding.rvContacts.adapter?.notifyDataSetChanged()
+                        applyFilter()
                     }
                 } catch (e: Exception) {
                     runOnUiThread {
@@ -202,7 +281,8 @@ class MainActivity : AppCompatActivity() {
                     if (msg.from_ss != ssId) {
                         runOnUiThread {
                             unreadMap[msg.from_ss] = (unreadMap[msg.from_ss] ?: 0) + 1
-                            binding.rvContacts.adapter?.notifyDataSetChanged()
+                            contactsWithMessages.add(msg.from_ss)
+                            applyFilter()
                         }
                     }
                 } catch (_: Exception) {}

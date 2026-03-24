@@ -84,7 +84,8 @@ class WSManager:
             self.connections[ss_id].discard(ws)
             if not self.connections[ss_id]:
                 del self.connections[ss_id]
-                # Keep last_ping for zombie detection
+                # Remove last_ping so zombie detection doesn't keep dead sessions
+                self.last_ping.pop(ss_id, None)
     def update_ping(self, ss_id: str):
         self.last_ping[ss_id] = time.time()
     def get_status(self, ss_id: str) -> str:
