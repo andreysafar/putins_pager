@@ -1,15 +1,38 @@
-# putins_pager
+# Safarancho Swimming Team — Pager
 
-Веб-пейджер: форма в браузере → доставка сообщений в Telegram выбранным подписчикам (через Bot API).
+Two components:
 
-## Публичный интерфейс
+1. **Backend** (`backend/`) — FastAPI server (port 8888). User registration, SS-ID, messaging, WebSocket.
+2. **Android** (`android/`) — Safarancho Pager app (Kotlin). Connects to backend.
 
-- Сайт: [telegram.iron-siberia.ru](https://telegram.iron-siberia.ru/)
+## Quick Start (Backend)
 
-## Репозиторий
+```bash
+cd backend
+cp .env.example .env   # edit if needed
+pip install -r requirements.txt
+python server.py       # http://localhost:8888
+```
 
-Код и конфигурация развёртывания для этого сервиса хранятся здесь. Детали стека (nginx, Xray TLS, FastAPI/uvicorn, systemd) — в документации деплоя на сервере.
+## Quick Start (Android)
 
-## Лицензия
+Open `android/` in Android Studio. Set `BASE_URL` in `build.gradle` or `ApiService.kt`.
+Build → APK.
 
-Уточните при необходимости — файл `LICENSE` можно добавить отдельным коммитом.
+## SS-ID Format
+
+`ss-XXXXX-pager` — 5 random chars, generated on first registration.
+
+## API Endpoints
+
+| Method | Path | Description |
+|--------|------|-------------|
+| POST | /register | Create user (name, display_name) → SS-ID |
+| GET | /contacts | List all registered users |
+| POST | /message | Send message (from, to, text) |
+| GET | /messages/{ss_id} | Get messages for SS-ID |
+| WS | /ws/{ss_id} | Real-time message stream |
+
+## License
+
+Private project.
