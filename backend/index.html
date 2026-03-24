@@ -3,115 +3,142 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>PAGER v6.0 | SPORTS-PUNK</title>
+    <title>PAGER v6.2 | SPORTS-PUNK</title>
     <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700;800&display=swap" rel="stylesheet">
     <style>
         :root {
-            --bg: #050a14;
-            --card: #0f172a;
-            --neon: #ff6d00;
-            --neon-glow: 0 0 15px rgba(255, 109, 0, 0.4), 0 0 30px rgba(255, 109, 0, 0.1);
+            --bg: #050a14; --card: #0f172a; --neon: #ff6d00;
+            --neon-glow: 0 0 15px rgba(255, 109, 0, 0.4);
             --text: #e2e8f0; --dim: #64748b;
         }
-        * { box-sizing: border-box; margin: 0; padding: 0; }
-        body { 
-            font-family: 'JetBrains Mono', monospace; background: var(--bg); color: var(--text); 
-            display: flex; flex-direction: column; height: 100vh; overflow: hidden;
-        }
-        header { 
-            padding: 15px; background: #000; border-bottom: 2px solid var(--neon);
-            display: flex; justify-content: space-between; align-items: center;
-        }
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'JetBrains Mono', monospace; }
+        body { background: var(--bg); color: var(--text); display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
+        
+        header { padding: 15px; background: #000; border-bottom: 2px solid var(--neon); display: flex; justify-content: space-between; align-items: center; }
         h1 { font-size: 1.1rem; color: var(--neon); letter-spacing: 2px; }
-        #lamp { width: 14px; height: 14px; border-radius: 50%; background: #222; transition: all 0.3s; }
+        #lamp { width: 14px; height: 14px; border-radius: 50%; background: #222; }
         #lamp.active { background: var(--neon); box-shadow: var(--neon-glow); animation: pulse 0.8s infinite alternate; }
         @keyframes pulse { from { opacity: 1; } to { opacity: 0.5; } }
 
-        main { flex: 1; overflow-y: auto; padding: 10px; display: flex; flex-direction: column; gap: 8px; }
-        .msg { background: var(--card); padding: 10px; border-radius: 6px; border-left: 3px solid var(--dim); font-size: 0.85rem; }
+        /* CONTACTS LIST */
+        #contacts-panel { 
+            background: #000; border-bottom: 1px solid #1e293b; padding: 10px; 
+            display: flex; gap: 10px; overflow-x: auto; min-height: 50px; align-items: center;
+        }
+        .contact-card { 
+            background: var(--card); border: 1px solid #333; padding: 8px 15px; border-radius: 6px;
+            font-size: 0.75rem; white-space: nowrap; cursor: pointer; color: var(--neon);
+        }
+        .contact-card:hover { border-color: var(--neon); background: #1a2744; }
+
+        main { flex: 1; overflow-y: auto; padding: 15px; display: flex; flex-direction: column-reverse; gap: 10px; }
+        .msg { background: var(--card); padding: 12px; border-radius: 8px; border-left: 3px solid var(--dim); font-size: 0.85rem; }
         .msg.inbound { border-left-color: var(--neon); }
+        .msg-meta { font-size: 0.65rem; color: var(--dim); margin-bottom: 4px; }
 
-        /* ATHLETS / CONTACTS ROW */
-        #athletes-row { 
-            padding: 10px; background: #000; display: flex; gap: 10px; overflow-x: auto; 
-            border-top: 1px solid #1e293b; border-bottom: 1px solid #1e293b;
-        }
-        .athlete-btn { 
-            background: #111; border: 1px solid #333; color: var(--neon); padding: 6px 12px; 
-            border-radius: 4px; font-size: 0.7rem; white-space: nowrap; cursor: pointer;
-        }
-        .athlete-btn:active { background: var(--neon); color: #000; }
-
-        footer { padding: 15px; background: #000; display: flex; flex-direction: column; gap: 8px; }
-        input { background: #111; border: 1px solid #333; color: #fff; padding: 10px; border-radius: 6px; outline: none; }
-        button { background: var(--neon); color: #000; border: none; padding: 12px; border-radius: 6px; font-weight: 800; cursor: pointer; }
+        footer { padding: 15px; background: #000; display: flex; flex-direction: column; gap: 8px; border-top: 1px solid #1e293b; }
+        .input-group { display: flex; gap: 8px; }
+        input { background: #111; border: 1px solid #333; color: #fff; padding: 12px; border-radius: 6px; outline: none; flex: 1; font-size: 0.9rem; }
+        input:focus { border-color: var(--neon); }
+        button { background: var(--neon); color: #000; border: none; padding: 12px 20px; border-radius: 6px; font-weight: 800; cursor: pointer; }
+        
+        .my-id-label { font-size: 0.6rem; color: var(--dim); text-align: center; margin-top: 5px; }
     </style>
 </head>
 <body>
     <header>
-        <div><h1>PAGER v6.0</h1> <div style="font-size:0.55rem; color:var(--dim)">SYNC: FITNESS_BOT_MONGO</div></div>
+        <div><h1>PAGER v6.2</h1><div style="font-size:0.55rem; color:var(--dim)">MODE: PERSISTENT_SESSION</div></div>
         <div id="lamp"></div>
     </header>
 
-    <div id="athletes-row">
-        <!-- Load from /api/athletes -->
-        <span style="color:var(--dim); font-size:0.6rem">SCANNING ATHLETES...</span>
+    <div id="contacts-panel">
+        <span style="color:var(--dim); font-size:0.65rem">LOADING ATHLETES...</span>
     </div>
 
-    <main id="messages"><div class="msg">SYSTEM: Link established.</div></main>
+    <main id="messages"></main>
 
     <footer>
-        <input type="text" id="target" placeholder="TARGET SSID">
-        <input type="text" id="payload" placeholder="MESSAGE">
+        <div class="input-group">
+            <input type="text" id="target" placeholder="TARGET SSID">
+            <input type="text" id="my-ss-id" placeholder="MY SSID (for login)">
+        </div>
+        <input type="text" id="payload" placeholder="ENCRYPTED MESSAGE...">
         <button onclick="send()">TRANSMIT</button>
+        <div class="my-id-label" id="status-line">DISCONNECTED. Enter "MY SSID" to connect.</div>
     </footer>
 
     <script>
         const lamp = document.getElementById('lamp');
         const msgs = document.getElementById('messages');
+        const statusLine = document.getElementById('status-line');
         let ws;
+        let mySsId = localStorage.getItem('pager_ss_id') || '';
 
-        async function loadAthletes() {
+        if (mySsId) document.getElementById('my-ss-id').value = mySsId;
+
+        async function loadContacts() {
             try {
                 const res = await fetch('/api/athletes');
-                const data = await res.json();
-                const row = document.getElementById('athletes-row');
-                row.innerHTML = data.length ? '' : '<span style="color:var(--dim); font-size:0.6rem">NO ATHLETES FOUND</span>';
-                data.forEach(a => {
-                    const btn = document.createElement('div');
-                    btn.className = 'athlete-btn';
-                    btn.innerText = (a.first_name || a.username || a.name || 'ANON').toUpperCase();
-                    btn.onclick = () => { document.getElementById('target').value = a.pager_ssid; };
-                    row.appendChild(btn);
+                const athletes = await res.json();
+                const panel = document.getElementById('contacts-panel');
+                panel.innerHTML = athletes.length ? '' : '<span style="color:var(--dim); font-size:0.65rem">NO ONLINE ATHLETES</span>';
+                athletes.forEach(a => {
+                    const card = document.createElement('div');
+                    card.className = 'contact-card';
+                    card.innerText = (a.first_name || a.username || a.name || 'ATHLETE').toUpperCase();
+                    card.onclick = () => { document.getElementById('target').value = a.pager_ssid; };
+                    panel.appendChild(card);
                 });
-            } catch(e) { console.error('Athletes scan failed'); }
+            } catch(e) { console.error('Contacts error'); }
         }
 
         function connect() {
-            ws = new WebSocket(`ws://${location.host}/ws/main_session`);
+            const inputId = document.getElementById('my-ss-id').value.trim();
+            if (!inputId) return;
+            
+            mySsId = inputId;
+            localStorage.setItem('pager_ss_id', mySsId);
+            
+            if (ws) ws.close();
+            ws = new WebSocket(`ws://${location.host}/ws/${mySsId}`);
+            
+            ws.onopen = () => { statusLine.innerText = `LINK ACTIVE: ${mySsId}`; statusLine.style.color = '#4ade80'; };
+            ws.onclose = () => { statusLine.innerText = 'LINK LOST. RECONNECTING...'; setTimeout(connect, 3000); };
             ws.onmessage = (e) => {
                 const d = JSON.parse(e.data);
                 lamp.classList.add('active'); setTimeout(() => lamp.classList.remove('active'), 2500);
-                const div = document.createElement('div'); div.className = 'msg inbound';
-                div.innerText = `[INBOUND]: ${d.text}`; msgs.prepend(div);
+                addMessage(`[INBOUND]: ${d.text}`, 'inbound');
+                if (navigator.vibrate) navigator.vibrate([100, 50, 100]);
             };
         }
 
         async function send() {
             const text = document.getElementById('payload').value;
             const target = document.getElementById('target').value;
+            if (!text || !target) return;
+
             const res = await fetch('/message', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ text, target })
+                body: JSON.stringify({ text, target, from_ss: mySsId })
             });
+
             if (res.ok) {
-                const div = document.createElement('div'); div.className = 'msg';
-                div.innerText = `[SENT]: ${text}`; msgs.prepend(div);
+                addMessage(`[SENT TO ${target}]: ${text}`, '');
                 document.getElementById('payload').value = '';
             }
         }
-        connect(); loadAthletes();
+
+        function addMessage(text, type) {
+            const div = document.createElement('div');
+            div.className = `msg ${type}`;
+            div.innerHTML = `<div class="msg-meta">${new Date().toLocaleTimeString()}</div>${text}`;
+            msgs.prepend(div);
+        }
+
+        document.getElementById('my-ss-id').onchange = connect;
+        loadContacts();
+        if (mySsId) connect();
     </script>
 </body>
 </html>

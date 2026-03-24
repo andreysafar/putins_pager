@@ -3,6 +3,7 @@ import os
 import sqlite3
 import secrets
 import asyncio
+import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 from contextlib import asynccontextmanager
@@ -60,7 +61,40 @@ class MessageReq(BaseModel):
     text: str
     target: str
 
-app = FastAPI(lifespan=lambda a: (yield))
+class RegisterReq(BaseModel):
+    label: str = ""  # optional human-readable label for the pager
+
+def init_db():
+    """Ensure pager.db and the SSID table exist."""
+    conn = get_db()
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS ssids (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            ssid TEXT UNIQUE NOT NULL,
+            label TEXT DEFAULT '',
+            created_at TEXT NOT NULL
+        )
+    """)
+    conn.commit()
+    conn.close()
+
+def generate_ssid() -> str:
+    """Generate a unique ssid in the form ss-XXXX-pager."""
+    while True:
+        suffix = secrets.token_hex(2)  # 4 hex chars
+        ssid = f"ss-{suffix}-pager"
+        conn = get_db()
+        row = conn.execute("SELECT 1 FROM ssids WHERE ssid = ?", (ssid,)).fetchone()
+        conn.close()
+        if row is None:
+            return ssid
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    init_db()
+    yield
+
+app = FastAPI(lifespan=lifespan)
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 
 @app.get("/")
@@ -69,6 +103,20 @@ def serve_index(): return FileResponse(BASE_DIR / "index.html")
 @app.get("/api/athletes")
 def api_athletes():
     return get_athletes()
+
+@app.post("/register")
+async def register_pager(req: RegisterReq):
+    """Register a new anonymous pager SSID, persist in SQLite, return to client."""
+    ssid = generate_ssid()
+    now = datetime.now(timezone.utc).isoformat()
+    conn = get_db()
+    conn.execute(
+        "INSERT INTO ssids (ssid, label, created_at) VALUES (?, ?, ?)",
+        (ssid, req.label, now),
+    )
+    conn.commit()
+    conn.close()
+    return {"ssid": ssid, "created_at": now}
 
 @app.post("/message")
 async def send_message(req: MessageReq):
