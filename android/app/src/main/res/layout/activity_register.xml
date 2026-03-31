@@ -1,0 +1,95 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:background="@color/bg_dark"
+    android:gravity="center"
+    android:padding="24dp">
+
+    <!-- LOGO / TITLE -->
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="📟 PAGER"
+        android:textColor="@color/accent"
+        android:textSize="32sp"
+        android:textStyle="bold"
+        android:fontFamily="monospace"
+        android:layout_marginBottom="4dp" />
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="MESH PAGER NETWORK"
+        android:textColor="@color/text_muted"
+        android:textSize="10sp"
+        android:fontFamily="monospace"
+        android:letterSpacing="0.3"
+        android:layout_marginBottom="32dp" />
+
+    <!-- REGISTER FORM -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:background="@color/bg_card"
+        android:padding="20dp">
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="ANONYMOUS ENTRY"
+            android:textColor="@color/accent"
+            android:textSize="12sp"
+            android:fontFamily="monospace"
+            android:letterSpacing="0.2"
+            android:layout_marginBottom="16dp" />
+
+        <EditText
+            android:id="@+id/etName"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:hint="CALLSIGN"
+            android:textColorHint="#546e7a"
+            android:textColor="#e0e0e0"
+            android:background="@color/bg_dark"
+            android:padding="14dp"
+            android:fontFamily="monospace"
+            android:textSize="14sp"
+            android:layout_marginBottom="12dp" />
+
+        <EditText
+            android:id="@+id/etDisplayName"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:hint="DISPLAY NAME (OPTIONAL)"
+            android:textColorHint="#546e7a"
+            android:textColor="#e0e0e0"
+            android:background="@color/bg_dark"
+            android:padding="14dp"
+            android:fontFamily="monospace"
+            android:textSize="14sp"
+            android:layout_marginBottom="20dp" />
+
+        <Button
+            android:id="@+id/btnRegister"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="⚡ ACQUIRE SSID"
+            android:backgroundTint="@color/accent"
+            android:textColor="@color/bg_dark"
+            android:textStyle="bold"
+            android:fontFamily="monospace"
+            android:textAllCaps="true" />
+    </LinearLayout>
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="OFF-GRID MESH EDITION"
+        android:textColor="@color/accent_dim"
+        android:textSize="9sp"
+        android:fontFamily="monospace"
+        android:layout_marginTop="24dp" />
+</LinearLayout>

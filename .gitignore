@@ -1,0 +1,12 @@
+# MeshPager
+/backend/pager.db
+/backend/.env
+/backend/__pycache__/
+/backend/.venv/
+/backend/*.pyc
+/android/.gradle/
+/android/build/
+/android/app/build/
+/android/.idea/
+/android/local.properties
+/android/*.iml
