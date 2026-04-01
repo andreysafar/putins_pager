@@ -14,8 +14,10 @@ class ChatActivity : AppCompatActivity() {
     private lateinit var binding: ActivityChatBinding
     private var ws: WebSocketClient? = null
     private lateinit var mySS: String
+    private lateinit var myToken: String
     private lateinit var contactSS: String
     private lateinit var contactName: String
+    private var contactPubKey: String = ""
     private val messages = mutableListOf<Message>()
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -23,14 +25,17 @@ class ChatActivity : AppCompatActivity() {
         binding = ActivityChatBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
-        mySS = getSharedPreferences("pager_prefs", MODE_PRIVATE).getString("ss_id", "")!!
+        val prefs = getSharedPreferences("pager_prefs", MODE_PRIVATE)
+        mySS = prefs.getString("ss_id", "")!!
+        myToken = prefs.getString("token", "")!!
         contactSS = intent.getStringExtra("contact_ss_id") ?: ""
         contactName = intent.getStringExtra("contact_name") ?: intent.getStringExtra("to_name") ?: ""
+        contactPubKey = intent.getStringExtra("contact_public_key") ?: ""
 
-        // Clear notification for this contact
         NotificationHelper.clearNotification(this, contactSS)
 
-        binding.tvChatWith.text = contactName
+        val e2eLabel = if (contactPubKey.isNotEmpty()) " [E2E]" else " [PLAIN]"
+        binding.tvChatWith.text = "$contactName$e2eLabel"
         binding.rvMessages.layoutManager = LinearLayoutManager(this)
 
         binding.btnSend.setOnClickListener { sendMessage() }
@@ -41,26 +46,27 @@ class ChatActivity : AppCompatActivity() {
     }
 
     private fun connectWebSocket() {
-        val wsUrl = BuildConfig.BASE_URL.replace("http", "ws") + "/ws/$mySS"
+        val wsUrl = BuildConfig.BASE_URL.replace("http", "ws") + "/ws/$mySS?token=$myToken"
         ws = object : WebSocketClient(URI(wsUrl)) {
             override fun onOpen(handshakedata: ServerHandshake?) {}
             override fun onMessage(message: String?) {
                 message ?: return
                 try {
                     val msg = ApiService.gson.fromJson(message, Message::class.java)
-                    if (msg.from_ss == mySS) return  // Skip own echoes
+                    if (msg.from_ss == mySS) return
+
+                    // Decrypt E2E if possible
+                    val (plainText, _) = CryptoHelper.tryDecryptMessageText(msg.text, this@ChatActivity)
+                    val decryptedMsg = msg.copy(text = plainText)
 
                     runOnUiThread {
                         if (msg.from_ss == contactSS) {
-                            // Message in current chat — display it
-                            messages.add(msg)
+                            messages.add(decryptedMsg)
                             binding.rvMessages.adapter?.notifyItemInserted(messages.size - 1)
                             binding.rvMessages.scrollToPosition(messages.size - 1)
                         } else {
-                            // Message from OTHER contact — show push notification
-                            // (don't disrupt current chat view)
                             NotificationHelper.showMessageNotification(
-                                this@ChatActivity, msg.from_ss, msg.from_ss, msg.text
+                                this@ChatActivity, msg.from_ss, msg.from_ss, plainText
                             )
                         }
                     }
@@ -84,13 +90,16 @@ class ChatActivity : AppCompatActivity() {
                 messages.addAll(msgs.filter {
                     (it.from_ss == mySS && it.to_ss == contactSS) ||
                     (it.from_ss == contactSS && it.to_ss == mySS)
+                }.map { msg ->
+                    val (plainText, _) = CryptoHelper.tryDecryptMessageText(msg.text, this@ChatActivity)
+                    msg.copy(text = plainText)
                 }.reversed())
                 runOnUiThread {
                     binding.rvMessages.adapter = MessageAdapter(messages, mySS)
                     binding.rvMessages.scrollToPosition(messages.size - 1)
                 }
             } catch (e: Exception) {
-                runOnUiThread { Toast.makeText(this, "Ошибка: ${e.message}", Toast.LENGTH_SHORT).show() }
+                runOnUiThread { Toast.makeText(this, "Error: ${e.message}", Toast.LENGTH_SHORT).show() }
             }
         }.start()
     }
@@ -101,17 +110,24 @@ class ChatActivity : AppCompatActivity() {
         binding.etMessage.setText("")
         Thread {
             try {
-                ApiService.sendMessage(mySS, contactSS, text)
+                // Encrypt if we have recipient's public key
+                val payload = if (contactPubKey.isNotEmpty()) {
+                    CryptoHelper.encryptForContact(text, contactPubKey, this@ChatActivity) ?: text
+                } else {
+                    text
+                }
+                ApiService.sendMessage(mySS, contactSS, payload)
                 runOnUiThread {
                     val msg = Message(
                         from_ss = mySS, to_ss = contactSS,
                         text = text, created_at = java.time.Instant.now().toString()
                     )
-                    messages.add(0, msg)
-                    binding.rvMessages.adapter?.notifyItemInserted(0)
+                    messages.add(msg)
+                    binding.rvMessages.adapter?.notifyItemInserted(messages.size - 1)
+                    binding.rvMessages.scrollToPosition(messages.size - 1)
                 }
             } catch (e: Exception) {
-                runOnUiThread { Toast.makeText(this, "Ошибка: ${e.message}", Toast.LENGTH_SHORT).show() }
+                runOnUiThread { Toast.makeText(this, "Error: ${e.message}", Toast.LENGTH_SHORT).show() }
             }
         }.start()
     }

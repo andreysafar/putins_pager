@@ -3,32 +3,65 @@ import os
 import sqlite3
 import secrets
 import asyncio
-import uuid
+import hmac
+import hashlib
 import json
 import time
+import base64
 import httpx
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from pathlib import Path
 from contextlib import asynccontextmanager
 from typing import Optional
 
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Query
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Query, Request, HTTPException, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
 import pymongo
+from slowapi import Limiter
+from slowapi.util import get_remote_address
+from slowapi.errors import RateLimitExceeded
+from starlette.responses import JSONResponse
 
 # --- Config ---
-PORT = 9009
-DB_PATH = "pager.db"
+PORT = int(os.getenv("PORT", "9009"))
+DB_PATH = os.getenv("DB_PATH", "pager.db")
 BASE_DIR = Path(__file__).resolve().parent
 MONGO_URI = os.getenv("MONGODB_URI", "mongodb://localhost:27017/mesh_pager")
+APP_SECRET = os.getenv("APP_SECRET", secrets.token_hex(32))
+MESH_SECRET = os.getenv("MESH_SECRET", "")
+CORS_ORIGINS = os.getenv("CORS_ORIGINS", "*").split(",")
+MESSAGE_TTL_DEFAULT = int(os.getenv("MESSAGE_TTL_DEFAULT", "86400"))  # 24h
+CLEANUP_INTERVAL = 300  # 5 min
 
 # --- Mesh Config ---
-# Neighbor nodes: list of base URLs this node can reach for mesh routing
-MESH_PEERS = json.loads(os.getenv("MESH_PEERS", "[]"))  # e.g. ["http://10.0.0.2:9009","http://10.0.0.3:9009"]
+MESH_PEERS = json.loads(os.getenv("MESH_PEERS", "[]"))
 NODE_ID = os.getenv("NODE_ID", f"node-{secrets.token_hex(3)}")
-MESH_PING_INTERVAL = 30  # seconds
+MESH_PING_INTERVAL = 30
+
+# --- Rate Limiter ---
+limiter = Limiter(key_func=get_remote_address)
+
+# --- Auth ---
+def generate_token(ss_id: str) -> str:
+    return hmac.new(APP_SECRET.encode(), ss_id.encode(), hashlib.sha256).hexdigest()
+
+def verify_token(ss_id: str, token: str) -> bool:
+    expected = generate_token(ss_id)
+    return hmac.compare_digest(expected, token)
+
+def require_auth(request: Request) -> str:
+    auth = request.headers.get("Authorization", "")
+    if not auth.startswith("Bearer "):
+        raise HTTPException(status_code=401, detail="Missing auth token")
+    parts = auth[7:].split(":", 1)
+    if len(parts) != 2:
+        raise HTTPException(status_code=401, detail="Invalid token format. Expected ss_id:token")
+    ss_id, token = parts
+    if not verify_token(ss_id, token):
+        raise HTTPException(status_code=401, detail="Invalid token")
+    return ss_id
 
 # --- DB ---
 def get_db():
@@ -38,28 +71,26 @@ def get_db():
 
 # --- Mongo Integration ---
 def get_athletes():
-    """Get athletes from MongoDB who have pager_ssid or are monitored."""
     try:
         client = pymongo.MongoClient(MONGO_URI, serverSelectionTimeoutMS=2000)
         db = client.get_database()
-        # Users with pager_ssid
         users = list(db.users.find(
             {"pager_ssid": {"$exists": True}},
-            {"_id": 0, "username": 1, "first_name": 1, "pager_ssid": 1, "display_name": 1}
+            {"_id": 0, "username": 1, "first_name": 1, "pager_ssid": 1, "display_name": 1, "public_key": 1}
         ).limit(50))
         if not users:
             users = list(db.monitored_athletes.find(
                 {},
-                {"_id": 0, "name": 1, "pager_ssid": 1}
+                {"_id": 0, "name": 1, "pager_ssid": 1, "public_key": 1}
             ).limit(50))
-        # Normalize: ensure each has ss_id and display_name
         result = []
         for u in users:
             result.append({
                 "ss_id": u.get("pager_ssid", u.get("ssid", "")),
                 "display_name": u.get("display_name") or u.get("first_name") or u.get("username") or u.get("name", "ATHLETE"),
+                "public_key": u.get("public_key", ""),
             })
-        return [r for r in result if r["ss_id"]]  # filter empty ssids
+        return [r for r in result if r["ss_id"]]
     except Exception as e:
         print(f"Mongo error: {e}")
         return []
@@ -68,12 +99,42 @@ def get_athletes():
 class WSManager:
     def __init__(self):
         self.connections: dict[str, set[WebSocket]] = {}
+
     async def connect(self, ss_id: str, ws: WebSocket):
         await ws.accept()
         self.connections.setdefault(ss_id, set()).add(ws)
+        # Store-and-forward: flush undelivered messages
+        await self._flush_pending(ss_id, ws)
+
+    async def _flush_pending(self, ss_id: str, ws: WebSocket):
+        conn = get_db()
+        rows = conn.execute(
+            "SELECT id, from_ss, to_ss, text, created_at FROM messages "
+            "WHERE to_ss = ? AND delivered = 0 ORDER BY id ASC",
+            (ss_id,)
+        ).fetchall()
+        delivered_ids = []
+        for r in rows:
+            try:
+                await ws.send_json({
+                    "text": r["text"],
+                    "from_ss": r["from_ss"],
+                    "to_ss": r["to_ss"],
+                    "created_at": r["created_at"],
+                })
+                delivered_ids.append(r["id"])
+            except:
+                break
+        if delivered_ids:
+            placeholders = ",".join("?" * len(delivered_ids))
+            conn.execute(f"UPDATE messages SET delivered = 1 WHERE id IN ({placeholders})", delivered_ids)
+            conn.commit()
+        conn.close()
+
     def disconnect(self, ss_id: str, ws: WebSocket):
         if ss_id in self.connections:
             self.connections[ss_id].discard(ws)
+
     async def send_to(self, ss_id: str, data: dict):
         for ws in list(self.connections.get(ss_id, [])):
             try:
@@ -85,11 +146,10 @@ ws_mgr = WSManager()
 
 # --- Mesh Network State ---
 class MeshNetwork:
-    """Tracks neighbor nodes, their contacts, and routes messages through available peers."""
     def __init__(self):
-        self.peers: dict[str, dict] = {}  # node_id -> {url, last_seen, contacts, status}
-        self.peer_contacts: dict[str, list] = {}  # node_id -> list of {ss_id, display_name}
-        self.route_table: dict[str, str] = {}  # ss_id -> node_id (which node knows this contact)
+        self.peers: dict[str, dict] = {}
+        self.peer_contacts: dict[str, list] = {}
+        self.route_table: dict[str, str] = {}
 
     def update_peer(self, node_id: str, url: str, contacts: list):
         self.peers[node_id] = {
@@ -98,7 +158,6 @@ class MeshNetwork:
             "status": "online"
         }
         self.peer_contacts[node_id] = contacts
-        # Update route table
         for c in contacts:
             ssid = c.get("ss_id", "")
             if ssid:
@@ -107,24 +166,24 @@ class MeshNetwork:
     def remove_peer(self, node_id: str):
         self.peers.pop(node_id, None)
         self.peer_contacts.pop(node_id, None)
-        # Clean route table
         to_remove = [ssid for ssid, nid in self.route_table.items() if nid == node_id]
         for ssid in to_remove:
             del self.route_table[ssid]
 
     def get_all_contacts(self) -> list:
-        """Merge local + all peer contacts, deduplicated by ss_id."""
         seen = set()
         result = []
-        # Local contacts from SQLite
         conn = get_db()
-        rows = conn.execute("SELECT ssid, label FROM ssids").fetchall()
+        rows = conn.execute("SELECT ssid, label, public_key FROM ssids").fetchall()
         conn.close()
         for r in rows:
             if r["ssid"] not in seen:
                 seen.add(r["ssid"])
-                result.append({"ss_id": r["ssid"], "display_name": r["label"] or r["ssid"]})
-        # Peer contacts
+                result.append({
+                    "ss_id": r["ssid"],
+                    "display_name": r["label"] or r["ssid"],
+                    "public_key": r["public_key"] or "",
+                })
         for node_id, contacts in self.peer_contacts.items():
             for c in contacts:
                 ssid = c.get("ss_id", "")
@@ -134,7 +193,6 @@ class MeshNetwork:
         return result
 
     def find_route(self, target_ss: str) -> Optional[str]:
-        """Find which peer node can deliver to target_ss. Returns base URL or None."""
         node_id = self.route_table.get(target_ss)
         if node_id and node_id in self.peers:
             peer = self.peers[node_id]
@@ -157,18 +215,19 @@ mesh = MeshNetwork()
 
 # --- Mesh Background Tasks ---
 async def mesh_ping_loop():
-    """Periodically ping all configured peers and exchange contact lists."""
     while True:
         my_contacts = get_local_contacts_for_mesh()
+        headers = {}
+        if MESH_SECRET:
+            headers["X-Mesh-Secret"] = MESH_SECRET
         for peer_url in MESH_PEERS:
             try:
                 async with httpx.AsyncClient(timeout=5) as client:
-                    # Ping + send our contacts
                     resp = await client.post(f"{peer_url}/mesh/hello", json={
                         "node_id": NODE_ID,
                         "contacts": my_contacts,
                         "timestamp": time.time()
-                    })
+                    }, headers=headers)
                     if resp.status_code == 200:
                         data = resp.json()
                         mesh.update_peer(
@@ -176,32 +235,43 @@ async def mesh_ping_loop():
                             peer_url,
                             data.get("contacts", [])
                         )
-            except Exception as e:
-                # Mark peer as potentially offline
+            except Exception:
                 pass
-        # Clean stale peers
         for nid in list(mesh.peers.keys()):
             if time.time() - mesh.peers[nid]["last_seen"] > MESH_PING_INTERVAL * 5:
                 mesh.remove_peer(nid)
         await asyncio.sleep(MESH_PING_INTERVAL)
 
+async def cleanup_expired_messages():
+    while True:
+        try:
+            conn = get_db()
+            now = datetime.now(timezone.utc).isoformat()
+            conn.execute("DELETE FROM messages WHERE expires_at IS NOT NULL AND expires_at < ?", (now,))
+            conn.commit()
+            conn.close()
+        except Exception:
+            pass
+        await asyncio.sleep(CLEANUP_INTERVAL)
+
 def get_local_contacts_for_mesh() -> list:
-    """Get all locally registered SSIDs for sharing with peers."""
     conn = get_db()
-    rows = conn.execute("SELECT ssid, label FROM ssids").fetchall()
+    rows = conn.execute("SELECT ssid, label, public_key FROM ssids").fetchall()
     conn.close()
-    return [{"ss_id": r["ssid"], "display_name": r["label"] or r["ssid"]} for r in rows]
+    return [{"ss_id": r["ssid"], "display_name": r["label"] or r["ssid"], "public_key": r["public_key"] or ""} for r in rows]
 
 # --- Pydantic Models ---
 class MessageReq(BaseModel):
     text: str
     target: str
     from_ss: str = ""
+    ttl_seconds: Optional[int] = None
 
 class RegisterReq(BaseModel):
     label: str = ""
     name: str = ""
     display_name: str = ""
+    public_key: str = ""
 
 class MeshHelloReq(BaseModel):
     node_id: str
@@ -214,6 +284,13 @@ class MeshMessageReq(BaseModel):
     text: str
     origin_node: str = ""
 
+# --- Mesh Auth ---
+def verify_mesh_secret(request: Request):
+    if MESH_SECRET:
+        provided = request.headers.get("X-Mesh-Secret", "")
+        if not hmac.compare_digest(provided, MESH_SECRET):
+            raise HTTPException(status_code=403, detail="Invalid mesh secret")
+
 # --- DB Init ---
 def init_db():
     conn = get_db()
@@ -222,6 +299,7 @@ def init_db():
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             ssid TEXT UNIQUE NOT NULL,
             label TEXT DEFAULT '',
+            public_key TEXT DEFAULT '',
             created_at TEXT NOT NULL
         )
     """)
@@ -231,15 +309,31 @@ def init_db():
             from_ss TEXT NOT NULL,
             to_ss TEXT NOT NULL,
             text TEXT NOT NULL,
-            created_at TEXT NOT NULL
+            created_at TEXT NOT NULL,
+            expires_at TEXT DEFAULT NULL,
+            delivered INTEGER DEFAULT 0
         )
     """)
+    conn.commit()
+    # Migrate: add columns if missing (for existing DBs)
+    try:
+        conn.execute("ALTER TABLE ssids ADD COLUMN public_key TEXT DEFAULT ''")
+    except Exception:
+        pass
+    try:
+        conn.execute("ALTER TABLE messages ADD COLUMN expires_at TEXT DEFAULT NULL")
+    except Exception:
+        pass
+    try:
+        conn.execute("ALTER TABLE messages ADD COLUMN delivered INTEGER DEFAULT 0")
+    except Exception:
+        pass
     conn.commit()
     conn.close()
 
 def generate_ssid() -> str:
     while True:
-        suffix = secrets.token_hex(2)
+        suffix = secrets.token_hex(8)
         ssid = f"ss-{suffix}-pager"
         conn = get_db()
         row = conn.execute("SELECT 1 FROM ssids WHERE ssid = ?", (ssid,)).fetchone()
@@ -248,18 +342,28 @@ def generate_ssid() -> str:
             return ssid
 
 # --- App Lifecycle ---
-async def start_mesh_tasks(app):
-    app.state.mesh_task = asyncio.create_task(mesh_ping_loop())
-
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     init_db()
-    task = asyncio.create_task(mesh_ping_loop())
+    mesh_task = asyncio.create_task(mesh_ping_loop())
+    cleanup_task = asyncio.create_task(cleanup_expired_messages())
     yield
-    task.cancel()
+    mesh_task.cancel()
+    cleanup_task.cancel()
 
 app = FastAPI(lifespan=lifespan)
-app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
+app.state.limiter = limiter
+
+@app.exception_handler(RateLimitExceeded)
+async def rate_limit_handler(request: Request, exc: RateLimitExceeded):
+    return JSONResponse(status_code=429, content={"detail": "Rate limit exceeded. Slow down."})
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=CORS_ORIGINS,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 # --- Routes ---
 
@@ -269,11 +373,9 @@ def serve_index():
 
 @app.get("/api/athletes")
 def api_athletes():
-    """Combined athletes from MongoDB + local SSIDs + mesh peers."""
     mongo_athletes = get_athletes()
     local_ssids = get_local_contacts_for_mesh()
     mesh_contacts = mesh.get_all_contacts()
-    # Merge all, deduplicate by ss_id
     seen = set()
     result = []
     for source in [mongo_athletes, local_ssids, mesh_contacts]:
@@ -285,64 +387,104 @@ def api_athletes():
     return result
 
 @app.get("/contacts")
-def get_contacts():
-    """All contacts: local + mongo + mesh (same as /api/athletes)."""
+@limiter.limit("10/minute")
+def get_contacts(request: Request):
     return api_athletes()
 
+@app.get("/contacts/{ss_id}/key")
+def get_contact_key(ss_id: str):
+    conn = get_db()
+    row = conn.execute("SELECT public_key FROM ssids WHERE ssid = ?", (ss_id,)).fetchone()
+    conn.close()
+    if row and row["public_key"]:
+        return {"ss_id": ss_id, "public_key": row["public_key"]}
+    raise HTTPException(status_code=404, detail="Public key not found")
+
 @app.post("/register")
-async def register_pager(req: RegisterReq):
+@limiter.limit("5/minute")
+async def register_pager(req: RegisterReq, request: Request):
     ssid = generate_ssid()
     label = req.display_name or req.label or req.name or ""
     now = datetime.now(timezone.utc).isoformat()
     conn = get_db()
     conn.execute(
-        "INSERT INTO ssids (ssid, label, created_at) VALUES (?, ?, ?)",
-        (ssid, label, now),
+        "INSERT INTO ssids (ssid, label, public_key, created_at) VALUES (?, ?, ?, ?)",
+        (ssid, label, req.public_key, now),
     )
     conn.commit()
     conn.close()
-    return {"ssid": ssid, "ss_id": ssid, "display_name": label, "created_at": now}
+    token = generate_token(ssid)
+    return {
+        "ssid": ssid,
+        "ss_id": ssid,
+        "display_name": label,
+        "token": token,
+        "created_at": now,
+    }
 
 @app.post("/message")
-async def send_message(req: MessageReq):
+@limiter.limit("30/minute")
+async def send_message(req: MessageReq, request: Request, caller_ss: str = Depends(require_auth)):
     now = datetime.now(timezone.utc).isoformat()
-    # Save to DB
+    expires_at = None
+    ttl = req.ttl_seconds if req.ttl_seconds is not None else MESSAGE_TTL_DEFAULT
+    if ttl > 0:
+        expires_at = (datetime.now(timezone.utc) + timedelta(seconds=ttl)).isoformat()
+
+    from_ss = caller_ss
+
     conn = get_db()
-    conn.execute(
-        "INSERT INTO messages (from_ss, to_ss, text, created_at) VALUES (?, ?, ?, ?)",
-        (req.from_ss, req.target, req.text, now),
+    cur = conn.execute(
+        "INSERT INTO messages (from_ss, to_ss, text, created_at, expires_at, delivered) VALUES (?, ?, ?, ?, ?, 0)",
+        (from_ss, req.target, req.text, now, expires_at),
     )
+    msg_id = cur.lastrowid
     conn.commit()
     conn.close()
-    # Try local delivery first
+
+    msg_data = {
+        "text": req.text,
+        "from_ss": from_ss,
+        "to_ss": req.target,
+        "created_at": now
+    }
+
+    # Try local delivery
     if ws_mgr.connections.get(req.target):
-        await ws_mgr.send_to(req.target, {
-            "text": req.text,
-            "from_ss": req.from_ss,
-            "to_ss": req.target,
-            "created_at": now
-        })
+        await ws_mgr.send_to(req.target, msg_data)
+        conn = get_db()
+        conn.execute("UPDATE messages SET delivered = 1 WHERE id = ?", (msg_id,))
+        conn.commit()
+        conn.close()
         return {"ok": True, "route": "local"}
+
     # Try mesh routing
     peer_url = mesh.find_route(req.target)
     if peer_url:
         try:
+            headers = {}
+            if MESH_SECRET:
+                headers["X-Mesh-Secret"] = MESH_SECRET
             async with httpx.AsyncClient(timeout=5) as client:
                 resp = await client.post(f"{peer_url}/mesh/deliver", json={
-                    "from_ss": req.from_ss,
+                    "from_ss": from_ss,
                     "target_ss": req.target,
                     "text": req.text,
                     "origin_node": NODE_ID
-                })
+                }, headers=headers)
                 if resp.status_code == 200:
+                    conn = get_db()
+                    conn.execute("UPDATE messages SET delivered = 1 WHERE id = ?", (msg_id,))
+                    conn.commit()
+                    conn.close()
                     return {"ok": True, "route": "mesh", "peer": peer_url}
-        except:
+        except Exception:
             pass
-    return {"ok": True, "route": "stored", "note": "Target not connected, message saved"}
+
+    return {"ok": True, "route": "stored", "note": "Target offline — message queued for delivery"}
 
 @app.get("/messages/{ss_id}")
 def get_messages(ss_id: str, limit: int = Query(default=100)):
-    """Get messages for a SSID (sent or received)."""
     conn = get_db()
     rows = conn.execute(
         "SELECT from_ss, to_ss, text, created_at FROM messages WHERE from_ss = ? OR to_ss = ? ORDER BY id DESC LIMIT ?",
@@ -352,17 +494,42 @@ def get_messages(ss_id: str, limit: int = Query(default=100)):
     return [{"from_ss": r["from_ss"], "to_ss": r["to_ss"], "text": r["text"], "created_at": r["created_at"]} for r in rows]
 
 @app.websocket("/ws/{ss_id}")
-async def ws_endpoint(ws: WebSocket, ss_id: str):
+async def ws_endpoint(ws: WebSocket, ss_id: str, token: str = Query(default="")):
+    # Validate token for WebSocket auth
+    if not verify_token(ss_id, token):
+        await ws.close(code=4001, reason="Invalid token")
+        return
     await ws_mgr.connect(ss_id, ws)
     try:
         while True:
             data = await ws.receive_text()
-            # Forward to target if structured
             try:
                 msg = json.loads(data)
                 if "target" in msg and "text" in msg:
-                    await send_message(MessageReq(text=msg["text"], target=msg["target"], from_ss=ss_id))
-            except:
+                    # Internal WS send — trusted since token was validated
+                    now = datetime.now(timezone.utc).isoformat()
+                    expires_at = None
+                    ttl = msg.get("ttl_seconds", MESSAGE_TTL_DEFAULT)
+                    if ttl and ttl > 0:
+                        expires_at = (datetime.now(timezone.utc) + timedelta(seconds=ttl)).isoformat()
+                    conn = get_db()
+                    cur = conn.execute(
+                        "INSERT INTO messages (from_ss, to_ss, text, created_at, expires_at, delivered) VALUES (?, ?, ?, ?, ?, 0)",
+                        (ss_id, msg["target"], msg["text"], now, expires_at),
+                    )
+                    msg_id = cur.lastrowid
+                    conn.commit()
+                    conn.close()
+                    if ws_mgr.connections.get(msg["target"]):
+                        await ws_mgr.send_to(msg["target"], {
+                            "text": msg["text"], "from_ss": ss_id,
+                            "to_ss": msg["target"], "created_at": now
+                        })
+                        conn = get_db()
+                        conn.execute("UPDATE messages SET delivered = 1 WHERE id = ?", (msg_id,))
+                        conn.commit()
+                        conn.close()
+            except Exception:
                 pass
     except WebSocketDisconnect:
         ws_mgr.disconnect(ss_id, ws)
@@ -370,15 +537,8 @@ async def ws_endpoint(ws: WebSocket, ss_id: str):
 # --- Mesh Endpoints ---
 
 @app.post("/mesh/hello")
-async def mesh_hello(req: MeshHelloReq):
-    """Receive ping from a neighbor node + their contact list. Reply with ours."""
-    # Auto-detect URL from request
-    peer_url = str(req.timestamp)  # placeholder, real URL comes from config
-    # Find matching peer URL from config
-    for url in MESH_PEERS:
-        # Simple heuristic: if node_id matches what we've seen, update
-        pass
-    # Update mesh state with any URL (we track by node_id)
+async def mesh_hello(req: MeshHelloReq, request: Request):
+    verify_mesh_secret(request)
     mesh.update_peer(req.node_id, f"peer-{req.node_id}", req.contacts)
     return {
         "node_id": NODE_ID,
@@ -387,29 +547,32 @@ async def mesh_hello(req: MeshHelloReq):
     }
 
 @app.post("/mesh/deliver")
-async def mesh_deliver(req: MeshMessageReq):
-    """Receive a message from a peer node for local delivery."""
+async def mesh_deliver(req: MeshMessageReq, request: Request):
+    verify_mesh_secret(request)
     now = datetime.now(timezone.utc).isoformat()
-    # Save to DB
     conn = get_db()
-    conn.execute(
-        "INSERT INTO messages (from_ss, to_ss, text, created_at) VALUES (?, ?, ?, ?)",
+    cur = conn.execute(
+        "INSERT INTO messages (from_ss, to_ss, text, created_at, delivered) VALUES (?, ?, ?, ?, 0)",
         (req.from_ss, req.target_ss, req.text, now),
     )
+    msg_id = cur.lastrowid
     conn.commit()
     conn.close()
-    # Try local WebSocket delivery
-    await ws_mgr.send_to(req.target_ss, {
-        "text": req.text,
-        "from_ss": req.from_ss,
-        "to_ss": req.target_ss,
-        "created_at": now
-    })
+    if ws_mgr.connections.get(req.target_ss):
+        await ws_mgr.send_to(req.target_ss, {
+            "text": req.text,
+            "from_ss": req.from_ss,
+            "to_ss": req.target_ss,
+            "created_at": now
+        })
+        conn = get_db()
+        conn.execute("UPDATE messages SET delivered = 1 WHERE id = ?", (msg_id,))
+        conn.commit()
+        conn.close()
     return {"ok": True, "delivered": True}
 
 @app.get("/mesh/status")
 def mesh_status():
-    """Current mesh network status."""
     return mesh.get_status()
 
 @app.get("/health")

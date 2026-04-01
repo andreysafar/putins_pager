@@ -3,10 +3,12 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>PAGER v6.5 | MESH NETWORK</title>
+    <title>PAGER v7.0 | E2E MESH</title>
     <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700;800&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/tweetnacl@1.0.3/nacl-fast.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/tweetnacl-util@0.15.1/nacl-util.min.js"></script>
     <style>
-        :root { --bg: #050a14; --neon: #ff6d00; --text: #e2e8f0; --dim: #64748b; --card: #0f172a; }
+        :root { --bg: #050a14; --neon: #ff6d00; --text: #e2e8f0; --dim: #64748b; --card: #0f172a; --green: #4caf50; }
         * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'JetBrains Mono', monospace; }
         body { background: var(--bg); color: var(--text); display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
         header { padding: 12px 15px; background: #000; border-bottom: 2px solid var(--neon); display: flex; justify-content: space-between; align-items: center; }
@@ -15,24 +17,26 @@
         #lamp { width: 14px; height: 14px; border-radius: 50%; background: #222; transition: all 0.3s; }
         #lamp.active { background: var(--neon); box-shadow: 0 0 15px var(--neon); animation: pulse 0.8s infinite alternate; }
         @keyframes pulse { from { opacity: 1; } to { opacity: 0.5; } }
-        
+
         #mesh-status { background: #0a0f1a; border-bottom: 1px solid #1e293b; padding: 6px 15px; font-size: 0.55rem; color: var(--dim); display: flex; gap: 15px; }
         .status-item { display: flex; align-items: center; gap: 4px; }
         .status-dot { width: 6px; height: 6px; border-radius: 50%; }
-        .dot-green { background: #4caf50; box-shadow: 0 0 4px #4caf50; }
+        .dot-green { background: var(--green); box-shadow: 0 0 4px var(--green); }
         .dot-orange { background: var(--neon); }
         .dot-red { background: #ff5252; }
-        
+        .e2e-badge { color: var(--green); font-weight: bold; }
+
         #contacts-panel { background: #000; border-bottom: 1px solid #1e293b; padding: 10px; display: flex; gap: 8px; overflow-x: auto; min-height: 55px; align-items: center; flex-wrap: nowrap; }
         .contact-card { background: var(--card); border: 1px solid #333; padding: 8px 14px; border-radius: 6px; font-size: 0.7rem; white-space: nowrap; cursor: pointer; color: var(--neon); transition: all 0.2s; flex-shrink: 0; }
         .contact-card:hover { border-color: var(--neon); box-shadow: 0 0 8px rgba(255,109,0,0.3); }
         .contact-card .ssid { font-size: 0.5rem; color: var(--dim); margin-top: 2px; }
-        
+        .contact-card .e2e { font-size: 0.45rem; color: var(--green); }
+
         main { flex: 1; overflow-y: auto; padding: 15px; display: flex; flex-direction: column-reverse; gap: 10px; }
         .msg { background: var(--card); padding: 12px; border-radius: 8px; border-left: 3px solid var(--dim); font-size: 0.85rem; }
         .msg.inbound { border-left-color: var(--neon); }
         .msg .meta { font-size: 0.55rem; color: var(--dim); margin-bottom: 4px; }
-        
+
         footer { padding: 12px 15px; background: #000; border-top: 1px solid #1e293b; display: flex; flex-direction: column; gap: 8px; }
         .input-group { display: flex; gap: 8px; }
         input { background: #111; border: 1px solid #333; color: #fff; padding: 10px 12px; border-radius: 6px; outline: none; flex: 1; font-size: 0.8rem; font-family: 'JetBrains Mono', monospace; }
@@ -40,12 +44,12 @@
         button { background: var(--neon); color: #000; border: none; padding: 10px 18px; border-radius: 4px; font-weight: 800; cursor: pointer; text-transform: uppercase; font-family: 'JetBrains Mono', monospace; font-size: 0.8rem; transition: all 0.2s; }
         button:hover { box-shadow: 0 0 12px rgba(255,109,0,0.5); }
         .btn-small { padding: 5px 10px !important; font-size: 0.55rem !important; background: #222 !important; color: #ff5252 !important; }
-        
+
         #reg-box { background: #1e293b; padding: 30px; border-radius: 12px; margin: 20% 15px; text-align: center; box-shadow: 0 0 30px rgba(0,0,0,0.8); border: 1px solid #333; }
         #reg-box h2 { color: var(--neon); margin-bottom: 8px; font-size: 1.2rem; }
         #reg-box p { font-size: 0.75rem; color: var(--text); margin-bottom: 20px; }
         #reg-box .sub { font-size: 0.55rem; color: var(--dim); margin-top: 15px; }
-        
+
         .empty-contacts { color: var(--dim); font-size: 0.6rem; padding: 10px; text-align: center; }
         .loading { animation: blink 1s infinite; }
         @keyframes blink { 50% { opacity: 0.3; } }
@@ -53,38 +57,39 @@
 </head>
 <body>
     <div id="reg-box" style="display:none">
-        <h2>📟 PAGER v6.5</h2>
-        <p>ANONYMOUS MESH NETWORK ENTRY<br>Генерация временного SSID для связи</p>
-        <button onclick="registerAnon()">⚡ ACQUIRE SSID</button>
+        <h2>📟 PAGER v7.0</h2>
+        <p>E2E ENCRYPTED MESH ENTRY<br>X25519 keypair + anonymous SSID</p>
+        <button onclick="registerAnon()">⚡ ACQUIRE SSID + KEYS</button>
         <div class="sub">OFF-GRID MESH EDITION</div>
     </div>
 
     <div id="app-ui" style="display:none; flex-direction:column; height:100vh">
         <header>
             <div>
-                <h1>📟 PAGER v6.5</h1>
+                <h1>📟 PAGER v7.0</h1>
                 <div class="header-info" id="my-id">OWNER: LOADING...</div>
             </div>
             <div id="lamp"></div>
         </header>
-        
+
         <div id="mesh-status">
             <div class="status-item"><div class="status-dot dot-green"></div> <span id="mesh-node">NODE: ---</span></div>
             <div class="status-item"><div class="status-dot dot-orange" id="mesh-peer-dot"></div> <span id="mesh-peers">PEERS: 0</span></div>
             <div class="status-item"><span id="mesh-routes">ROUTES: 0</span></div>
+            <div class="status-item"><span class="e2e-badge" id="e2e-status">E2E: ---</span></div>
         </div>
-        
+
         <div id="contacts-panel">
-            <span class="empty-contacts loading">⏳ LOADING CONTACTS...</span>
+            <span class="empty-contacts loading">SCANNING MESH...</span>
         </div>
-        
+
         <main id="messages"></main>
-        
+
         <footer>
             <div class="input-group">
                 <input type="text" id="target" placeholder="TARGET SSID (ss-xxxx-pager)">
             </div>
-            <input type="text" id="payload" placeholder="ENCRYPTED MESSAGE..." onkeydown="if(event.key==='Enter')send()">
+            <input type="text" id="payload" placeholder="E2E encrypted message..." onkeydown="if(event.key==='Enter')send()">
             <div class="input-group">
                 <button onclick="send()">📡 TRANSMIT</button>
                 <button class="btn-small" onclick="logout()">LOGOUT</button>
@@ -97,55 +102,162 @@
         const msgs = document.getElementById('messages');
         const lamp = document.getElementById('lamp');
         let mySsId = localStorage.getItem('pager_ss_id');
+        let myToken = localStorage.getItem('pager_token');
+        let myKeyPair = null;
+        let contactKeys = {};  // ss_id -> Uint8Array public key
         let ws = null;
 
+        // --- Crypto helpers ---
+        function loadKeyPair() {
+            const sk = localStorage.getItem('pager_secret_key');
+            const pk = localStorage.getItem('pager_public_key');
+            if (sk && pk) {
+                myKeyPair = {
+                    secretKey: nacl.util.decodeBase64(sk),
+                    publicKey: nacl.util.decodeBase64(pk),
+                };
+            }
+            return myKeyPair;
+        }
+
+        function generateKeyPair() {
+            const kp = nacl.box.keyPair();
+            localStorage.setItem('pager_secret_key', nacl.util.encodeBase64(kp.secretKey));
+            localStorage.setItem('pager_public_key', nacl.util.encodeBase64(kp.publicKey));
+            myKeyPair = kp;
+            return kp;
+        }
+
+        function encryptMessage(plaintext, recipientPubKey) {
+            const nonce = nacl.randomBytes(nacl.box.nonceLength);
+            const msgBytes = nacl.util.decodeUTF8(plaintext);
+            const encrypted = nacl.box(msgBytes, nonce, recipientPubKey, myKeyPair.secretKey);
+            return {
+                ciphertext: nacl.util.encodeBase64(encrypted),
+                nonce: nacl.util.encodeBase64(nonce),
+                from_pub: nacl.util.encodeBase64(myKeyPair.publicKey),
+            };
+        }
+
+        function decryptMessage(ciphertextB64, nonceB64, senderPubB64) {
+            try {
+                const ciphertext = nacl.util.decodeBase64(ciphertextB64);
+                const nonce = nacl.util.decodeBase64(nonceB64);
+                const senderPub = nacl.util.decodeBase64(senderPubB64);
+                const decrypted = nacl.box.open(ciphertext, nonce, senderPub, myKeyPair.secretKey);
+                if (!decrypted) return null;
+                return nacl.util.encodeUTF8(decrypted);
+            } catch (e) {
+                return null;
+            }
+        }
+
+        function tryDecrypt(text) {
+            try {
+                const obj = JSON.parse(text);
+                if (obj.ciphertext && obj.nonce && obj.from_pub) {
+                    const plain = decryptMessage(obj.ciphertext, obj.nonce, obj.from_pub);
+                    return plain ? { text: plain, encrypted: true } : { text: '[DECRYPT FAILED]', encrypted: true };
+                }
+            } catch (e) {}
+            return { text: text, encrypted: false };
+        }
+
+        // --- Auth header ---
+        function authHeaders() {
+            return {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${mySsId}:${myToken}`,
+            };
+        }
+
+        // --- Registration ---
         async function registerAnon() {
             const btn = event.target;
             btn.disabled = true;
-            btn.textContent = 'SYNCING...';
+            btn.textContent = 'GENERATING KEYS...';
             try {
+                const kp = generateKeyPair();
+                const pubB64 = nacl.util.encodeBase64(kp.publicKey);
                 const res = await fetch('/register', {
                     method: 'POST',
-                    body: JSON.stringify({label: 'web-anon'}),
-                    headers: {'Content-Type': 'application/json'}
+                    body: JSON.stringify({ label: 'web-anon', public_key: pubB64 }),
+                    headers: { 'Content-Type': 'application/json' }
                 });
                 const data = await res.json();
                 if (data.ssid || data.ss_id) {
                     mySsId = data.ssid || data.ss_id;
+                    myToken = data.token;
                     localStorage.setItem('pager_ss_id', mySsId);
+                    localStorage.setItem('pager_token', myToken);
                     initApp();
                 }
-            } catch(e) {
+            } catch (e) {
                 btn.disabled = false;
                 btn.textContent = '⚡ RETRY';
             }
         }
 
+        // --- Contacts ---
         async function loadContacts() {
             const panel = document.getElementById('contacts-panel');
-            panel.innerHTML = '<span class="empty-contacts loading">⏳ SCANNING MESH...</span>';
+            panel.innerHTML = '';
+            const loadingSpan = document.createElement('span');
+            loadingSpan.className = 'empty-contacts loading';
+            loadingSpan.textContent = 'SCANNING MESH...';
+            panel.appendChild(loadingSpan);
             try {
                 const res = await fetch('/contacts');
                 const athletes = await res.json();
                 panel.innerHTML = '';
                 if (!athletes.length) {
-                    panel.innerHTML = '<span class="empty-contacts">NO CONTACTS FOUND — MESH EMPTY</span>';
+                    const emptySpan = document.createElement('span');
+                    emptySpan.className = 'empty-contacts';
+                    emptySpan.textContent = 'NO CONTACTS — MESH EMPTY';
+                    panel.appendChild(emptySpan);
                     return;
                 }
                 athletes.forEach(a => {
                     const card = document.createElement('div');
                     card.className = 'contact-card';
-                    const name = (a.display_name || a.first_name || a.username || a.name || 'ATHLETE').toUpperCase();
-                    card.innerHTML = `${name}<div class="ssid">${a.ss_id}</div>`;
+                    const nameSpan = document.createElement('span');
+                    nameSpan.textContent = (a.display_name || 'ATHLETE').toUpperCase();
+                    card.appendChild(nameSpan);
+
+                    const ssidDiv = document.createElement('div');
+                    ssidDiv.className = 'ssid';
+                    ssidDiv.textContent = a.ss_id;
+                    card.appendChild(ssidDiv);
+
+                    if (a.public_key) {
+                        contactKeys[a.ss_id] = nacl.util.decodeBase64(a.public_key);
+                        const e2eDiv = document.createElement('div');
+                        e2eDiv.className = 'e2e';
+                        e2eDiv.textContent = 'E2E READY';
+                        card.appendChild(e2eDiv);
+                    }
+
                     card.onclick = () => {
                         document.getElementById('target').value = a.ss_id;
                         document.getElementById('payload').focus();
                     };
                     panel.appendChild(card);
                 });
-            } catch(e) {
-                panel.innerHTML = '<span class="empty-contacts">⚠ CONTACTS API OFFLINE</span>';
+                updateE2EStatus();
+            } catch (e) {
+                panel.innerHTML = '';
+                const errSpan = document.createElement('span');
+                errSpan.className = 'empty-contacts';
+                errSpan.textContent = 'CONTACTS API OFFLINE';
+                panel.appendChild(errSpan);
             }
+        }
+
+        function updateE2EStatus() {
+            const el = document.getElementById('e2e-status');
+            const hasKeys = myKeyPair && myKeyPair.secretKey;
+            el.textContent = hasKeys ? 'E2E: ACTIVE' : 'E2E: OFF';
+            el.style.color = hasKeys ? 'var(--green)' : '#ff5252';
         }
 
         async function loadMeshStatus() {
@@ -157,63 +269,113 @@
                 document.getElementById('mesh-routes').textContent = `ROUTES: ${status.known_routes}`;
                 const dot = document.getElementById('mesh-peer-dot');
                 dot.className = 'status-dot ' + (status.online_peers > 0 ? 'dot-green' : 'dot-orange');
-            } catch(e) {}
+            } catch (e) {}
         }
 
+        // --- Init ---
         function initApp() {
             document.getElementById('reg-box').style.display = 'none';
             document.getElementById('app-ui').style.display = 'flex';
             document.getElementById('my-id').textContent = `ID: ${mySsId}`;
+            loadKeyPair();
+            updateE2EStatus();
             connectWS();
             loadContacts();
             loadMeshStatus();
             setInterval(loadMeshStatus, 30000);
         }
 
+        // --- WebSocket ---
         function connectWS() {
             if (ws) ws.close();
-            ws = new WebSocket(`ws://${location.host}/ws/${mySsId}`);
+            const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
+            ws = new WebSocket(`${proto}//${location.host}/ws/${mySsId}?token=${myToken}`);
             ws.onmessage = (e) => {
                 const d = JSON.parse(e.data);
                 lamp.classList.add('active');
                 setTimeout(() => lamp.classList.remove('active'), 2500);
+
+                const result = tryDecrypt(d.text);
                 const div = document.createElement('div');
                 div.className = 'msg inbound';
-                div.innerHTML = `<div class="meta">[${new Date().toLocaleTimeString()}] FROM: ${d.from_ss || 'UNKNOWN'}</div>${d.text}`;
+
+                const meta = document.createElement('div');
+                meta.className = 'meta';
+                const lockIcon = result.encrypted ? ' [E2E]' : ' [PLAIN]';
+                meta.textContent = `[${new Date().toLocaleTimeString()}] FROM: ${d.from_ss || 'UNKNOWN'}${lockIcon}`;
+                div.appendChild(meta);
+
+                const body = document.createElement('span');
+                body.textContent = result.text;
+                div.appendChild(body);
+
                 msgs.prepend(div);
             };
             ws.onclose = () => { setTimeout(connectWS, 5000); };
             ws.onerror = () => { ws.close(); };
         }
 
+        // --- Send ---
         async function send() {
             const text = document.getElementById('payload').value.trim();
             const target = document.getElementById('target').value.trim();
             if (!text || !target) return;
+
+            let payload = text;
+            let isEncrypted = false;
+
+            // E2E encrypt if we have recipient's key
+            if (myKeyPair && contactKeys[target]) {
+                const enc = encryptMessage(text, contactKeys[target]);
+                payload = JSON.stringify(enc);
+                isEncrypted = true;
+            }
+
             try {
                 const res = await fetch('/message', {
                     method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({ text, target, from_ss: mySsId })
+                    headers: authHeaders(),
+                    body: JSON.stringify({ text: payload, target, from_ss: mySsId })
                 });
                 if (res.ok) {
                     const data = await res.json();
                     const div = document.createElement('div');
                     div.className = 'msg';
-                    div.innerHTML = `<div class="meta">[${new Date().toLocaleTimeString()}] TO: ${target} | ${data.route || 'sent'}</div>${text}`;
+
+                    const meta = document.createElement('div');
+                    meta.className = 'meta';
+                    const lockIcon = isEncrypted ? ' [E2E]' : ' [PLAIN]';
+                    meta.textContent = `[${new Date().toLocaleTimeString()}] TO: ${target} | ${data.route || 'sent'}${lockIcon}`;
+                    div.appendChild(meta);
+
+                    const body = document.createElement('span');
+                    body.textContent = text;
+                    div.appendChild(body);
+
                     msgs.prepend(div);
                     document.getElementById('payload').value = '';
+                } else if (res.status === 429) {
+                    alert('RATE LIMITED — slow down');
                 }
-            } catch(e) {}
+            } catch (e) {}
         }
 
+        // --- Logout ---
         function logout() {
             localStorage.removeItem('pager_ss_id');
+            localStorage.removeItem('pager_token');
+            localStorage.removeItem('pager_secret_key');
+            localStorage.removeItem('pager_public_key');
             location.reload();
         }
 
-        if (mySsId) initApp();
-        else document.getElementById('reg-box').style.display = 'block';
+        // --- Boot ---
+        if (mySsId && myToken) {
+            loadKeyPair();
+            initApp();
+        } else {
+            document.getElementById('reg-box').style.display = 'block';
+        }
     </script>
 </body>
 </html>

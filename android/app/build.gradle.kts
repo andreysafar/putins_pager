@@ -48,4 +48,7 @@ dependencies {
     implementation("com.google.code.gson:gson:2.10.1")
     implementation("org.java-websocket:Java-WebSocket:1.5.4")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3")
+    // NaCl crypto for E2E encryption
+    implementation("com.goterl:lazysodium-android:5.1.0@aar")
+    implementation("net.java.dev.jna:jna:5.14.0@aar")
 }

@@ -28,6 +28,7 @@ class MainActivity : AppCompatActivity() {
     private var contactsList: MutableList<Contact> = mutableListOf()
     private var unreadMap: MutableMap<String, Int> = mutableMapOf()
     private var mySsId: String? = null
+    private var myToken: String? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -35,12 +36,19 @@ class MainActivity : AppCompatActivity() {
         setContentView(binding.root)
 
         mySsId = prefs.getString("ss_id", null)
+        myToken = prefs.getString("token", null)
+        initApiAuth()
 
-        if (mySsId != null) {
+        if (mySsId != null && myToken != null) {
             showContactsView()
         } else {
             showRegisterView()
         }
+    }
+
+    private fun initApiAuth() {
+        mySsId?.let { ApiService.authSsId = it }
+        myToken?.let { ApiService.authToken = it }
     }
 
     private fun showRegisterView() {
@@ -67,15 +75,13 @@ class MainActivity : AppCompatActivity() {
         refreshContacts()
         connectWebSocket(mySsId!!)
 
-        // LOGOUT: long-press SSID
         binding.tvMyId.setOnLongClickListener {
-            prefs.edit().remove("ss_id").apply()
+            prefs.edit().remove("ss_id").remove("token").apply()
             Toast.makeText(this, "SSID CLEARED. RESTARTING.", Toast.LENGTH_SHORT).show()
             recreate()
             true
         }
 
-        // REFRESH button
         binding.btnRefresh.setOnClickListener {
             refreshContacts()
             Toast.makeText(this, "SCANNING...", Toast.LENGTH_SHORT).show()
@@ -84,10 +90,20 @@ class MainActivity : AppCompatActivity() {
 
     private fun doRegister(name: String, displayName: String) {
         binding.btnRegister.isEnabled = false
-        binding.btnRegister.text = "SYNCING..."
+        binding.btnRegister.text = "GENERATING KEYS..."
 
-        val json = """{"name":"$name","display_name":"$displayName","label":"$displayName"}"""
-        val body = json.toRequestBody("application/json; charset=utf-8".toMediaType())
+        // Generate E2E keypair
+        val kp = CryptoHelper.generateKeyPair()
+        CryptoHelper.saveKeyPair(this, kp)
+        val pubKeyB64 = CryptoHelper.getPublicKeyBase64(this)
+
+        val jsonBody = gson.toJson(mapOf(
+            "name" to name,
+            "display_name" to displayName,
+            "label" to displayName,
+            "public_key" to pubKeyB64,
+        ))
+        val body = jsonBody.toRequestBody("application/json; charset=utf-8".toMediaType())
         val request = Request.Builder()
             .url("${BuildConfig.BASE_URL}/register")
             .post(body)
@@ -114,8 +130,13 @@ class MainActivity : AppCompatActivity() {
                 val respBody = response.body?.string() ?: return
                 try {
                     val data = gson.fromJson(respBody, RegisterResponse::class.java)
-                    prefs.edit().putString("ss_id", data.ss_id).apply()
+                    prefs.edit()
+                        .putString("ss_id", data.ss_id)
+                        .putString("token", data.token)
+                        .apply()
                     mySsId = data.ss_id
+                    myToken = data.token
+                    initApiAuth()
                     runOnUiThread {
                         Toast.makeText(this@MainActivity, "SSID: ${data.ss_id}", Toast.LENGTH_SHORT).show()
                         showContactsView()
@@ -137,6 +158,7 @@ class MainActivity : AppCompatActivity() {
             val intent = Intent(this, ChatActivity::class.java)
             intent.putExtra("contact_ss_id", contact.ss_id)
             intent.putExtra("contact_name", contact.display_name)
+            intent.putExtra("contact_public_key", contact.public_key)
             startActivity(intent)
         }
     }
@@ -173,13 +195,13 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun connectWebSocket(ssId: String) {
-        val wsUrl = BuildConfig.BASE_URL.replace("http", "ws") + "/ws/$ssId"
+        val token = myToken ?: return
+        val wsUrl = BuildConfig.BASE_URL.replace("http", "ws") + "/ws/$ssId?token=$token"
         val request = Request.Builder().url(wsUrl).build()
 
         ws = client.newWebSocket(request, object : WebSocketListener() {
             override fun onMessage(webSocket: WebSocket, text: String) {
                 runOnUiThread { pulseLamp() }
-                // Parse for unread badge update
                 try {
                     val msg = gson.fromJson(text, Message::class.java)
                     if (msg.from_ss != ssId) {
@@ -214,6 +236,6 @@ class MainActivity : AppCompatActivity() {
 
     override fun onDestroy() {
         super.onDestroy()
-        ws?.close()
+        ws?.close(1000, "activity destroyed")
     }
 }

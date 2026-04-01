@@ -7,8 +7,8 @@ import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 
 // --- Data models ---
-data class RegisterResponse(val ss_id: String, val display_name: String)
-data class Contact(val ss_id: String, val display_name: String)
+data class RegisterResponse(val ss_id: String, val display_name: String, val token: String)
+data class Contact(val ss_id: String, val display_name: String, val public_key: String = "")
 data class Message(val from_ss: String, val to_ss: String, val text: String, val created_at: String)
 
 object ApiService {
@@ -17,8 +17,18 @@ object ApiService {
     private val BASE = BuildConfig.BASE_URL
     private val JSON = "application/json; charset=utf-8".toMediaType()
 
-    fun register(name: String, displayName: String): RegisterResponse {
-        val body = """{"name":"$name","display_name":"$displayName"}"""
+    var authToken: String = ""
+    var authSsId: String = ""
+
+    private fun authHeader(): String = "Bearer $authSsId:$authToken"
+
+    fun register(name: String, displayName: String, publicKey: String): RegisterResponse {
+        val body = gson.toJson(mapOf(
+            "name" to name,
+            "display_name" to displayName,
+            "label" to displayName,
+            "public_key" to publicKey,
+        ))
         val req = Request.Builder().url("$BASE/register")
             .post(body.toRequestBody(JSON)).build()
         client.newCall(req).execute().use { resp ->
@@ -34,8 +44,13 @@ object ApiService {
     }
 
     fun sendMessage(from: String, to: String, text: String) {
-        val body = """{"from_ss":"$from","to_ss":"$to","text":"$text"}"""
+        val body = gson.toJson(mapOf(
+            "from_ss" to from,
+            "target" to to,
+            "text" to text,
+        ))
         val req = Request.Builder().url("$BASE/message")
+            .addHeader("Authorization", authHeader())
             .post(body.toRequestBody(JSON)).build()
         client.newCall(req).execute().close()
     }

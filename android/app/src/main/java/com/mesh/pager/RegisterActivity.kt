@@ -5,6 +5,7 @@ import android.content.Intent
 import android.os.Bundle
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
+import com.google.gson.Gson
 import com.mesh.pager.databinding.ActivityRegisterBinding
 import okhttp3.*
 import okhttp3.MediaType.Companion.toMediaType
@@ -15,6 +16,7 @@ class RegisterActivity : AppCompatActivity() {
 
     private lateinit var binding: ActivityRegisterBinding
     private val client = OkHttpClient()
+    private val gson = Gson()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -34,10 +36,20 @@ class RegisterActivity : AppCompatActivity() {
 
     private fun doRegister(name: String, displayName: String) {
         binding.btnRegister.isEnabled = false
-        binding.btnRegister.text = "SYNCING..."
+        binding.btnRegister.text = "GENERATING KEYS..."
 
-        val json = """{"name":"$name","display_name":"$displayName","label":"$displayName"}"""
-        val body = json.toRequestBody("application/json; charset=utf-8".toMediaType())
+        // Generate E2E keypair
+        val kp = CryptoHelper.generateKeyPair()
+        CryptoHelper.saveKeyPair(this, kp)
+        val pubKeyB64 = CryptoHelper.getPublicKeyBase64(this)
+
+        val jsonBody = gson.toJson(mapOf(
+            "name" to name,
+            "display_name" to displayName,
+            "label" to displayName,
+            "public_key" to pubKeyB64,
+        ))
+        val body = jsonBody.toRequestBody("application/json; charset=utf-8".toMediaType())
         val request = Request.Builder()
             .url("${BuildConfig.BASE_URL}/register")
             .post(body)
@@ -61,16 +73,18 @@ class RegisterActivity : AppCompatActivity() {
                     }
                     return
                 }
-                val body = response.body?.string() ?: return
+                val respBody = response.body?.string() ?: return
                 try {
-                    val gson = com.google.gson.Gson()
-                    val data = gson.fromJson(body, RegisterResponse::class.java)
-                    // Save SSID
+                    val data = gson.fromJson(respBody, RegisterResponse::class.java)
                     getSharedPreferences("pager_prefs", Context.MODE_PRIVATE)
-                        .edit().putString("ss_id", data.ss_id).apply()
-                    // Launch main
+                        .edit()
+                        .putString("ss_id", data.ss_id)
+                        .putString("token", data.token)
+                        .apply()
+                    ApiService.authSsId = data.ss_id
+                    ApiService.authToken = data.token
                     runOnUiThread {
-                        Toast.makeText(this@RegisterActivity, "SSID ACQUIRED: ${data.ss_id}", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(this@RegisterActivity, "SSID: ${data.ss_id}", Toast.LENGTH_SHORT).show()
                         startActivity(Intent(this@RegisterActivity, MainActivity::class.java))
                         finish()
                     }
