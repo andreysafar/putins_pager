@@ -575,6 +575,58 @@ async def mesh_deliver(req: MeshMessageReq, request: Request):
 def mesh_status():
     return mesh.get_status()
 
+
+@app.get("/mesh/route/{ssid}")
+def mesh_route(ssid: str):
+    """Lookup routing info for an SSID — used by external services (e.g. neZhri
+    bot) to decide whether the "contact athlete" button should be enabled.
+
+    Returns:
+      online: bool — True if the SSID is locally connected (WebSocket) or
+              reachable via a fresh mesh peer
+      node_id: str — local node id (this server) or the peer node hosting the SSID
+      node_url: str — url to direct messages to (this server's URL or peer URL)
+    """
+    # Local match: connected via WebSocket right now or registered locally.
+    locally_connected = bool(ws_mgr.connections.get(ssid))
+    locally_registered = False
+    conn = get_db()
+    try:
+        row = conn.execute("SELECT 1 FROM ssids WHERE ssid = ?", (ssid,)).fetchone()
+        locally_registered = row is not None
+    finally:
+        conn.close()
+
+    if locally_connected:
+        return {
+            "ssid": ssid,
+            "node_id": NODE_ID,
+            "node_url": "",  # local; caller already knows this server
+            "online": True,
+            "locally_registered": True,
+        }
+
+    # Mesh routing table — peer that advertised this SSID.
+    peer_url = mesh.find_route(ssid)
+    if peer_url:
+        peer_node_id = mesh.route_table.get(ssid, "")
+        return {
+            "ssid": ssid,
+            "node_id": peer_node_id,
+            "node_url": peer_url,
+            "online": True,
+            "locally_registered": locally_registered,
+        }
+
+    # Known but offline (registered locally but no live WS, no mesh route).
+    return {
+        "ssid": ssid,
+        "node_id": NODE_ID if locally_registered else "",
+        "node_url": "",
+        "online": False,
+        "locally_registered": locally_registered,
+    }
+
 @app.get("/health")
 def health():
     return {"status": "ok", "node_id": NODE_ID, "peers": len(mesh.peers)}
