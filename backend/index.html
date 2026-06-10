@@ -1231,16 +1231,32 @@
         return url.split('/').pop().split('?')[0] || 'file';
     }
 
+    // Escape a value for safe use inside an HTML attribute, preventing the
+    // attachment URL (which originates from message text) from breaking out of
+    // the attribute and injecting markup/handlers (XSS).
+    function escapeAttr(s) {
+        return String(s)
+            .replace(/&/g, '&amp;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#39;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;');
+    }
+
     function renderImagePreview(url) {
-        return `<img class="msg-img-preview" src="${url}" alt="preview" onclick="openImageModal('${url}')">`;
+        const safe = escapeAttr(url);
+        // Pass the URL via a data attribute and read it in the handler instead
+        // of interpolating into a JS string literal.
+        return `<img class="msg-img-preview" src="${safe}" alt="preview" data-url="${safe}" onclick="openImageModal(this.dataset.url)">`;
     }
 
     function renderFileRow(url) {
-        const name = getFilename(url);
+        const safe = escapeAttr(url);
+        const name = escapeAttr(getFilename(url));
         return `<div class="msg-file-row">
             <span class="msg-file-icon">📄</span>
             <span class="msg-file-name">${name}</span>
-            <a class="btn-download" href="${url}" download target="_blank">СКАЧАТЬ</a>
+            <a class="btn-download" href="${safe}" download target="_blank">СКАЧАТЬ</a>
         </div>`;
     }
 

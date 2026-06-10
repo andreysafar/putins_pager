@@ -751,14 +751,20 @@ def download_node_kit():
         info.size = len(server_content)
         tar.addfile(info, io.BytesIO(server_content))
         
-        # 2. index.html - read full content  
+        # 2. index.html - read full content
         html_content = (BASE_DIR / "index.html").read_bytes()
         info = tarfile.TarInfo(name="index.html")
         info.size = len(html_content)
         tar.addfile(info, io.BytesIO(html_content))
-        
+
+        # 2b. mesh_router.py — server.py imports this; a node without it crashes.
+        router_content = (BASE_DIR / "mesh_router.py").read_bytes()
+        info = tarfile.TarInfo(name="mesh_router.py")
+        info.size = len(router_content)
+        tar.addfile(info, io.BytesIO(router_content))
+
         # 3. requirements.txt
-        req_content = b"fastapi\nuvicorn[standard]\npymongo\npython-multipart\n"
+        req_content = b"fastapi\nuvicorn[standard]\npymongo\npython-multipart\nhttpx\n"
         info = tarfile.TarInfo(name="requirements.txt")
         info.size = len(req_content)
         tar.addfile(info, io.BytesIO(req_content))
