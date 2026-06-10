@@ -794,6 +794,7 @@
         <div class="input-row">
             <input type="text" class="lcd-input" id="payload" placeholder="Введите сообщение..." onkeydown="if(event.key==='Enter')send()">
             <button class="btn-attach" onclick="document.getElementById('file-input').click()" title="Прикрепить файл">📎</button>
+            <button class="btn-attach" onclick="startCall()" title="Видеозвонок" id="btn-call">📹</button>
             <button class="btn-send" onclick="send()" title="Отправить">
                 <span class="arrow">▶</span>
                 <span>SEND</span>
@@ -820,6 +821,34 @@
 <div class="img-modal-overlay" id="img-modal" onclick="this.classList.remove('open')">
     <img id="img-modal-img" src="" alt="">
 </div>
+
+<!-- Video call overlay -->
+<div class="call-overlay" id="call-overlay">
+    <div class="call-stage">
+        <video id="remote-video" autoplay playsinline></video>
+        <video id="local-video" autoplay playsinline muted></video>
+        <div class="call-status" id="call-status">CONNECTING...</div>
+    </div>
+    <div class="call-controls">
+        <button class="call-btn call-accept" id="call-accept" onclick="acceptCall()" style="display:none">✅ ОТВЕТИТЬ</button>
+        <button class="call-btn call-mute" id="call-mute" onclick="toggleMute()">🎤 MUTE</button>
+        <button class="call-btn call-video" id="call-video-toggle" onclick="toggleVideo()">📹 CAM</button>
+        <button class="call-btn call-end" onclick="endCall()">📴 END</button>
+    </div>
+</div>
+<style>
+.call-overlay{position:fixed;inset:0;background:rgba(0,0,0,0.92);z-index:9999;display:none;flex-direction:column;align-items:center;justify-content:center;gap:16px}
+.call-overlay.open{display:flex}
+.call-stage{position:relative;width:min(92vw,720px);aspect-ratio:4/3;background:#020;border:2px solid var(--online,#3a3);border-radius:8px;overflow:hidden}
+#remote-video{width:100%;height:100%;object-fit:cover;background:#010}
+#local-video{position:absolute;right:8px;bottom:8px;width:28%;border:1px solid var(--online,#3a3);border-radius:6px;background:#010;object-fit:cover}
+.call-status{position:absolute;top:8px;left:8px;font-family:'Share Tech Mono',monospace;font-size:0.7rem;color:#7f7;background:rgba(0,0,0,0.5);padding:2px 8px;border-radius:3px}
+.call-controls{display:flex;gap:10px;flex-wrap:wrap;justify-content:center}
+.call-btn{font-family:'Share Tech Mono',monospace;font-size:0.65rem;padding:10px 16px;border-radius:6px;border:1px solid rgba(120,255,120,0.4);background:rgba(20,40,20,0.8);color:#9f9;cursor:pointer}
+.call-btn.call-end{border-color:rgba(255,80,80,0.6);color:#f99}
+.call-btn.call-accept{border-color:rgba(120,255,120,0.8);color:#7f7}
+.call-btn.active{background:rgba(255,80,80,0.25)}
+</style>
 
 <script>
     // ========== STATE ==========
@@ -1128,6 +1157,12 @@
                     return;
                 }
 
+                // WebRTC call signaling (offer/answer/ICE/end)
+                if (d.type === 'call_signal') {
+                    handleCallSignal(d.from_ss, d.payload || {});
+                    return;
+                }
+
                 // Regular message
                 const fromSs = d.from_ss || 'UNKNOWN';
                 const text = d.text || '';
@@ -1411,6 +1446,165 @@
                 ws.send(JSON.stringify({ type: 'get_presence' }));
             }
         }, 15000);
+    }
+
+    // ========== VIDEO CALLS (WebRTC) ==========
+    // Signaling rides the existing WebSocket (type=call_signal); media flows
+    // peer-to-peer. STUN only — works on most networks; add a TURN server for
+    // strict NATs.
+    const RTC_CONFIG = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] };
+    let pc = null;            // RTCPeerConnection
+    let localStream = null;
+    let callPeer = null;      // ss_id of the other party
+    let callState = 'idle';   // idle | calling | ringing | active
+    let pendingOffer = null;  // stored offer while ringing
+
+    function sendSignal(target, payload) {
+        if (ws && ws.readyState === WebSocket.OPEN) {
+            ws.send(JSON.stringify({ type: 'call_signal', target, payload }));
+        }
+    }
+
+    function setCallStatus(text) {
+        const el = document.getElementById('call-status');
+        if (el) el.textContent = text;
+    }
+
+    function openCallUI() { document.getElementById('call-overlay').classList.add('open'); }
+    function closeCallUI() { document.getElementById('call-overlay').classList.remove('open'); }
+
+    async function getLocalStream() {
+        if (localStream) return localStream;
+        localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+        document.getElementById('local-video').srcObject = localStream;
+        return localStream;
+    }
+
+    function newPeerConnection(peer) {
+        const conn = new RTCPeerConnection(RTC_CONFIG);
+        conn.onicecandidate = (e) => {
+            if (e.candidate) sendSignal(peer, { kind: 'ice', candidate: e.candidate });
+        };
+        conn.ontrack = (e) => {
+            document.getElementById('remote-video').srcObject = e.streams[0];
+            setCallStatus('● LIVE');
+            callState = 'active';
+        };
+        conn.onconnectionstatechange = () => {
+            if (['failed', 'disconnected', 'closed'].includes(conn.connectionState)) {
+                if (callState !== 'idle') endCall();
+            }
+        };
+        return conn;
+    }
+
+    async function startCall() {
+        const target = document.getElementById('target').value.trim() || activeChatId;
+        if (!target) { alert('Сначала выбери получателя'); return; }
+        if (callState !== 'idle') return;
+        callPeer = target;
+        callState = 'calling';
+        openCallUI();
+        setCallStatus(`CALLING ${target}...`);
+        try {
+            await getLocalStream();
+            pc = newPeerConnection(target);
+            localStream.getTracks().forEach(t => pc.addTrack(t, localStream));
+            const offer = await pc.createOffer();
+            await pc.setLocalDescription(offer);
+            sendSignal(target, { kind: 'offer', sdp: pc.localDescription });
+        } catch (err) {
+            setCallStatus('CAMERA/MIC ERROR');
+            setTimeout(endCall, 1500);
+        }
+    }
+
+    async function handleCallSignal(from, payload) {
+        const kind = payload.kind;
+        if (kind === 'unavailable') {
+            setCallStatus('UNAVAILABLE');
+            setTimeout(endCall, 1500);
+            return;
+        }
+        if (kind === 'offer') {
+            // Incoming call — show accept button.
+            callPeer = from;
+            callState = 'ringing';
+            pendingOffer = payload.sdp;
+            openCallUI();
+            setCallStatus(`INCOMING CALL: ${from}`);
+            document.getElementById('call-accept').style.display = '';
+            lampFlash();
+            return;
+        }
+        if (kind === 'answer' && pc) {
+            await pc.setRemoteDescription(new RTCSessionDescription(payload.sdp));
+            setCallStatus('CONNECTING...');
+            return;
+        }
+        if (kind === 'ice' && pc && payload.candidate) {
+            try { await pc.addIceCandidate(new RTCIceCandidate(payload.candidate)); } catch (e) {}
+            return;
+        }
+        if (kind === 'end') {
+            teardownCall();
+            return;
+        }
+    }
+
+    async function acceptCall() {
+        if (callState !== 'ringing' || !pendingOffer) return;
+        document.getElementById('call-accept').style.display = 'none';
+        setCallStatus('CONNECTING...');
+        try {
+            await getLocalStream();
+            pc = newPeerConnection(callPeer);
+            localStream.getTracks().forEach(t => pc.addTrack(t, localStream));
+            await pc.setRemoteDescription(new RTCSessionDescription(pendingOffer));
+            const answer = await pc.createAnswer();
+            await pc.setLocalDescription(answer);
+            sendSignal(callPeer, { kind: 'answer', sdp: pc.localDescription });
+            pendingOffer = null;
+        } catch (err) {
+            setCallStatus('CAMERA/MIC ERROR');
+            setTimeout(endCall, 1500);
+        }
+    }
+
+    function toggleMute() {
+        if (!localStream) return;
+        const track = localStream.getAudioTracks()[0];
+        if (!track) return;
+        track.enabled = !track.enabled;
+        document.getElementById('call-mute').classList.toggle('active', !track.enabled);
+    }
+
+    function toggleVideo() {
+        if (!localStream) return;
+        const track = localStream.getVideoTracks()[0];
+        if (!track) return;
+        track.enabled = !track.enabled;
+        document.getElementById('call-video-toggle').classList.toggle('active', !track.enabled);
+    }
+
+    function teardownCall() {
+        if (pc) { try { pc.close(); } catch (e) {} pc = null; }
+        if (localStream) {
+            localStream.getTracks().forEach(t => t.stop());
+            localStream = null;
+        }
+        document.getElementById('local-video').srcObject = null;
+        document.getElementById('remote-video').srcObject = null;
+        document.getElementById('call-accept').style.display = 'none';
+        pendingOffer = null;
+        callPeer = null;
+        callState = 'idle';
+        closeCallUI();
+    }
+
+    function endCall() {
+        if (callPeer) sendSignal(callPeer, { kind: 'end' });
+        teardownCall();
     }
 
     // ========== BOOT ==========
