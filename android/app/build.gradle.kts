@@ -11,8 +11,8 @@ android {
         applicationId = "com.safarancho.pager"
         minSdk = 24
         targetSdk = 34
-        versionCode = 1
-        versionName = "1.0"
+        versionCode = 2
+        versionName = "2.0"
     }
     buildTypes {
         // Debug: Android emulator -> host machine (backend on :9009).
@@ -23,7 +23,7 @@ android {
         release {
             isMinifyEnabled = false
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
-            buildConfigField("String", "BASE_URL", "\"https://telegram.iron-siberia.ru\"")
+            buildConfigField("String", "BASE_URL", "\"https://pager.iron-siberia.ru\"")
         }
     }
     compileOptions {
