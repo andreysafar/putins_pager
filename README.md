@@ -66,9 +66,18 @@ MESH_PEERS='["http://другая-нода:9009"]'
 | POST | `/mesh/hello` | Ping от пира + обмен контактами/URL |
 | POST | `/mesh/ingest` | Приём конверта от любого транспорта (multi-hop) |
 | POST | `/mesh/deliver` | Legacy single-hop (заворачивается в ingest) |
+| POST | `/keys` / GET `/keys/{ss_id}` | Реестр публичных ключей (E2E) |
+| WS | `call_signal` | Сигналинг видеозвонков (offer/answer/ICE/end) |
 | POST | `/upload` | Загрузить файл |
 | GET | `/download_node_kit` | Скачать архив ноды |
 | GET | `/health` | Проверка здоровья |
+
+## Видеозвонки и шифрование
+
+- **Видеозвонки**: WebRTC P2P, сигналинг по WebSocket. Кнопка 📹 в
+  веб-клиенте и в чате Android; работают веб ↔ веб и веб ↔ Android.
+- **E2E**: ECDH P-256 + AES-256-GCM, прозрачно с фолбэком на открытый
+  текст. Подробности и ограничения — в [MESH.md](MESH.md).
 
 ## Mesh-архитектура
 
