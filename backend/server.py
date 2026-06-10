@@ -19,7 +19,15 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
-import pymongo
+
+from mesh_router import MeshMessage, MeshRouter
+
+# MongoDB is an optional integration (athlete directory). Import lazily so the
+# pager node still runs when pymongo is missing or its TLS backend is broken.
+try:
+    import pymongo
+except BaseException as _e:  # noqa: BLE001 - a broken native TLS backend raises pyo3 panics, not Exception
+    pymongo = None
 
 # --- Config ---
 PORT = 9009
@@ -34,6 +42,9 @@ MONGO_URI = os.getenv("MONGODB_URI", "mongodb://localhost:27017/fitness_bot")
 MESH_PEERS = json.loads(os.getenv("MESH_PEERS", "[]"))  # e.g. ["http://10.0.0.2:9009","http://10.0.0.3:9009"]
 MAIN_NODE_URL = os.getenv("MAIN_NODE_URL", "")  # URL главной ноды для авто-регистрации
 NODE_ID = os.getenv("NODE_ID", f"node-{secrets.token_hex(3)}")
+# This node's externally-reachable URL, advertised to peers so they can route
+# back to us. Falls back to localhost for single-node dev.
+NODE_URL = os.getenv("NODE_URL", f"http://localhost:{PORT}")
 MESH_PING_INTERVAL = 30  # seconds
 
 # --- DB ---
@@ -45,6 +56,8 @@ def get_db():
 # --- Mongo Integration ---
 def get_athletes():
     """Get athletes from MongoDB who have pager_ssid or are monitored."""
+    if pymongo is None:
+        return []
     try:
         client = pymongo.MongoClient(MONGO_URI, serverSelectionTimeoutMS=2000)
         db = client.get_database()
@@ -147,11 +160,26 @@ class MeshNetwork:
             "status": "online"
         }
         self.peer_contacts[node_id] = contacts
-        # Update route table
+        # Update route table + router topology
         for c in contacts:
             ssid = c.get("ss_id", "")
             if ssid:
                 self.route_table[ssid] = node_id
+                router.learn_route(ssid, node_id)
+
+    def available_peer_ids(self) -> list:
+        """node_ids of peers seen recently enough to be considered reachable."""
+        now = time.time()
+        return [
+            nid for nid, p in self.peers.items()
+            if now - p["last_seen"] < MESH_PING_INTERVAL * 3
+        ]
+
+    def url_for(self, node_id: str) -> Optional[str]:
+        peer = self.peers.get(node_id)
+        if peer and peer.get("url", "").startswith("http"):
+            return peer["url"]
+        return None
 
     def remove_peer(self, node_id: str):
         self.peers.pop(node_id, None)
@@ -160,6 +188,7 @@ class MeshNetwork:
         to_remove = [ssid for ssid, nid in self.route_table.items() if nid == node_id]
         for ssid in to_remove:
             del self.route_table[ssid]
+        router.forget_node(node_id)
 
     def get_all_contacts(self) -> list:
         """Merge local + all peer contacts, deduplicated by ss_id."""
@@ -202,7 +231,64 @@ class MeshNetwork:
                       for nid, p in self.peers.items()}
         }
 
+# Router holds the pure routing logic; mesh holds peer transport state.
+router = MeshRouter(NODE_ID)
 mesh = MeshNetwork()
+
+
+def sync_router_local_ssids() -> None:
+    """Keep the router's view of locally-registered contacts current."""
+    router.set_local_ssids(s["ss_id"] for s in get_local_contacts_for_mesh())
+
+
+async def forward_to_peers(msg: MeshMessage, node_ids: list) -> list:
+    """POST a mesh envelope to each peer's /mesh/ingest. Returns delivered node_ids."""
+    delivered = []
+    for nid in node_ids:
+        url = mesh.url_for(nid)
+        if not url:
+            continue
+        try:
+            async with httpx.AsyncClient(timeout=5) as client:
+                resp = await client.post(f"{url}/mesh/ingest", json=msg.to_dict())
+                if resp.status_code == 200:
+                    delivered.append(nid)
+        except Exception:
+            # Peer unreachable right now — message stays stored for retry.
+            pass
+    return delivered
+
+
+async def route_mesh_message(msg: MeshMessage) -> dict:
+    """Run a message through the router and act on the decision."""
+    sync_router_local_ssids()
+    decision = router.handle(msg, available_peers=mesh.available_peer_ids())
+    result = {"msg_id": msg.msg_id, "reason": decision.reason,
+              "delivered_local": False, "forwarded": []}
+
+    if decision.deliver_locally:
+        # Only mark delivered if a live socket actually receives it; otherwise
+        # leave it pending so store-and-forward pushes it on reconnect.
+        if ws_mgr.connections.get(msg.target_ss):
+            await ws_mgr.send_to(msg.target_ss, {
+                "text": msg.text,
+                "from_ss": msg.from_ss,
+                "to_ss": msg.target_ss,
+                "created_at": datetime.now(timezone.utc).isoformat(),
+                "msg_id": msg.msg_id,
+            })
+            mark_delivered(msg.msg_id, msg.target_ss)
+            result["delivered_local"] = True
+        else:
+            # Target is a known local contact but offline — persist for later.
+            store_message(msg.msg_id, msg.from_ss, msg.target_ss, msg.text,
+                          datetime.now(timezone.utc).isoformat(), delivered=False)
+
+    if decision.forward_to:
+        msg.ttl -= 1
+        result["forwarded"] = await forward_to_peers(msg, decision.forward_to)
+
+    return result
 
 # --- Mesh Background Tasks ---
 async def mesh_ping_loop():
@@ -216,7 +302,8 @@ async def mesh_ping_loop():
                     resp = await client.post(f"{peer_url}/mesh/hello", json={
                         "node_id": NODE_ID,
                         "contacts": my_contacts,
-                        "timestamp": time.time()
+                        "timestamp": time.time(),
+                        "self_url": NODE_URL,
                     })
                     if resp.status_code == 200:
                         data = resp.json()
@@ -256,6 +343,7 @@ class MeshHelloReq(BaseModel):
     node_id: str
     contacts: list
     timestamp: float
+    self_url: str = ""  # sender's reachable URL, so we can route back to it
 
 class MeshMessageReq(BaseModel):
     from_ss: str
@@ -277,24 +365,90 @@ def init_db():
     conn.execute("""
         CREATE TABLE IF NOT EXISTS messages (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
+            msg_id TEXT,
             from_ss TEXT NOT NULL,
             to_ss TEXT NOT NULL,
             text TEXT NOT NULL,
-            created_at TEXT NOT NULL
+            created_at TEXT NOT NULL,
+            delivered INTEGER DEFAULT 0
         )
     """)
+    # Migrate older DBs that predate the msg_id / delivered columns.
+    cols = {r["name"] for r in conn.execute("PRAGMA table_info(messages)").fetchall()}
+    if "msg_id" not in cols:
+        conn.execute("ALTER TABLE messages ADD COLUMN msg_id TEXT")
+    if "delivered" not in cols:
+        conn.execute("ALTER TABLE messages ADD COLUMN delivered INTEGER DEFAULT 0")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_msg_id ON messages(msg_id)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_to_pending ON messages(to_ss, delivered)")
     conn.commit()
     conn.close()
 
+
+def store_message(msg_id: str, from_ss: str, to_ss: str, text: str,
+                  created_at: str, delivered: bool = False) -> None:
+    """Persist a message, ignoring duplicates by msg_id (store-and-forward)."""
+    conn = get_db()
+    try:
+        if msg_id:
+            existing = conn.execute(
+                "SELECT 1 FROM messages WHERE msg_id = ?", (msg_id,)
+            ).fetchone()
+            if existing:
+                return
+        conn.execute(
+            "INSERT INTO messages (msg_id, from_ss, to_ss, text, created_at, delivered) "
+            "VALUES (?, ?, ?, ?, ?, ?)",
+            (msg_id, from_ss, to_ss, text, created_at, 1 if delivered else 0),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def mark_delivered(msg_id: str, to_ss: str) -> None:
+    if not msg_id:
+        return
+    conn = get_db()
+    try:
+        conn.execute(
+            "UPDATE messages SET delivered = 1 WHERE msg_id = ? AND to_ss = ?",
+            (msg_id, to_ss),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def pending_messages_for(ss_id: str) -> list:
+    """Undelivered messages addressed to ss_id (store-and-forward on reconnect)."""
+    conn = get_db()
+    try:
+        rows = conn.execute(
+            "SELECT msg_id, from_ss, to_ss, text, created_at FROM messages "
+            "WHERE to_ss = ? AND delivered = 0 ORDER BY id ASC",
+            (ss_id,),
+        ).fetchall()
+    finally:
+        conn.close()
+    return [dict(r) for r in rows]
+
 def generate_ssid() -> str:
     while True:
-        suffix = secrets.token_hex(2)
+        # 4 bytes = 32 bits of entropy. token_hex(2) gave only 16 bits
+        # (65k space), brute-forceable in seconds.
+        suffix = secrets.token_hex(4)
         ssid = f"ss-{suffix}-pager"
         conn = get_db()
         row = conn.execute("SELECT 1 FROM ssids WHERE ssid = ?", (ssid,)).fetchone()
         conn.close()
         if row is None:
             return ssid
+
+
+# Bound message size so a single peer/client can't flood the mesh or DB.
+MAX_TEXT_LEN = 8192
+MAX_SSID_LEN = 64
 
 # --- App Lifecycle ---
 async def start_mesh_tasks(app):
@@ -395,40 +549,33 @@ async def register_pager(req: RegisterReq):
 
 @app.post("/message")
 async def send_message(req: MessageReq):
+    # Input validation: bound sizes to protect the DB and mesh.
+    if not req.text or len(req.text) > MAX_TEXT_LEN:
+        return {"ok": False, "error": "text empty or too long"}
+    if not req.target or len(req.target) > MAX_SSID_LEN:
+        return {"ok": False, "error": "invalid target"}
+
     now = datetime.now(timezone.utc).isoformat()
-    # Save to DB
-    conn = get_db()
-    conn.execute(
-        "INSERT INTO messages (from_ss, to_ss, text, created_at) VALUES (?, ?, ?, ?)",
-        (req.from_ss, req.target, req.text, now),
-    )
-    conn.commit()
-    conn.close()
-    # Try local delivery first
+    msg = MeshMessage.create(req.from_ss, req.target, req.text)
+
+    # Persist immediately (store-and-forward); delivery status updated below.
+    store_message(msg.msg_id, req.from_ss, req.target, req.text, now, delivered=False)
+
+    # Local delivery shortcut.
     if ws_mgr.connections.get(req.target):
         await ws_mgr.send_to(req.target, {
-            "text": req.text,
-            "from_ss": req.from_ss,
-            "to_ss": req.target,
-            "created_at": now
+            "text": req.text, "from_ss": req.from_ss, "to_ss": req.target,
+            "created_at": now, "msg_id": msg.msg_id,
         })
-        return {"ok": True, "route": "local"}
-    # Try mesh routing
-    peer_url = mesh.find_route(req.target)
-    if peer_url:
-        try:
-            async with httpx.AsyncClient(timeout=5) as client:
-                resp = await client.post(f"{peer_url}/mesh/deliver", json={
-                    "from_ss": req.from_ss,
-                    "target_ss": req.target,
-                    "text": req.text,
-                    "origin_node": NODE_ID
-                })
-                if resp.status_code == 200:
-                    return {"ok": True, "route": "mesh", "peer": peer_url}
-        except:
-            pass
-    return {"ok": True, "route": "stored", "note": "Target not connected, message saved"}
+        mark_delivered(msg.msg_id, req.target)
+        return {"ok": True, "route": "local", "msg_id": msg.msg_id}
+
+    # Otherwise hand to the mesh router for multi-hop forwarding.
+    result = await route_mesh_message(msg)
+    if result["forwarded"]:
+        return {"ok": True, "route": "mesh", "msg_id": msg.msg_id, "peers": result["forwarded"]}
+    return {"ok": True, "route": "stored", "msg_id": msg.msg_id,
+            "note": "Target not reachable yet, message saved for forwarding"}
 
 @app.get("/messages/{ss_id}")
 def get_messages(ss_id: str, limit: int = Query(default=100)):
@@ -444,6 +591,19 @@ def get_messages(ss_id: str, limit: int = Query(default=100)):
 @app.websocket("/ws/{ss_id}")
 async def ws_endpoint(ws: WebSocket, ss_id: str):
     await ws_mgr.connect(ss_id, ws)
+    # Store-and-forward: flush any messages that arrived while this SSID was
+    # offline, then mark them delivered.
+    try:
+        pending = pending_messages_for(ss_id)
+        for m in pending:
+            await ws.send_json({
+                "text": m["text"], "from_ss": m["from_ss"], "to_ss": m["to_ss"],
+                "created_at": m["created_at"], "msg_id": m["msg_id"],
+                "pending": True,
+            })
+            mark_delivered(m["msg_id"], ss_id)
+    except Exception:
+        pass
     try:
         while True:
             data = await ws.receive_text()
@@ -497,19 +657,19 @@ async def ws_endpoint(ws: WebSocket, ss_id: str):
 
 @app.post("/mesh/hello")
 async def mesh_hello(req: MeshHelloReq):
-    """Receive ping from a neighbor node + their contact list. Reply with ours."""
-    # Auto-detect URL from request
-    peer_url = str(req.timestamp)  # placeholder, real URL comes from config
-    # Find matching peer URL from config
-    for url in MESH_PEERS:
-        # Simple heuristic: if node_id matches what we've seen, update
-        pass
-    # Update mesh state with any URL (we track by node_id)
-    mesh.update_peer(req.node_id, f"peer-{req.node_id}", req.contacts)
+    """Receive ping from a neighbor node + their contact list. Reply with ours.
+
+    The caller advertises its own reachable URL via `self_url`; we store that so
+    return-routing works. Previously we stored a bogus `peer-<id>` placeholder,
+    which made reverse delivery impossible.
+    """
+    peer_url = req.self_url if req.self_url.startswith("http") else f"peer-{req.node_id}"
+    mesh.update_peer(req.node_id, peer_url, req.contacts)
     return {
         "node_id": NODE_ID,
         "contacts": get_local_contacts_for_mesh(),
-        "timestamp": time.time()
+        "timestamp": time.time(),
+        "self_url": NODE_URL,
     }
 
 @app.post("/mesh/register")
@@ -522,26 +682,39 @@ async def mesh_register(req: dict):
         return {"ok": True, "peers": MESH_PEERS}
     return {"ok": False, "reason": "already_exists"}
 
+@app.post("/mesh/ingest")
+async def mesh_ingest(envelope: dict):
+    """Primary mesh entry point: accept a MeshMessage envelope from ANY transport.
+
+    Internet peers, the Wi-Fi/NSD bridge, and the BLE bridge all POST here. The
+    router decides whether to deliver locally and/or forward onward, with dedup
+    and TTL handled centrally so the same message can arrive over several
+    transports without looping or duplicating.
+    """
+    msg = MeshMessage.from_dict(envelope)
+    if not msg.target_ss or len(msg.text) > MAX_TEXT_LEN:
+        return {"ok": False, "error": "invalid envelope"}
+    # Persist for store-and-forward before routing.
+    store_message(msg.msg_id, msg.from_ss, msg.target_ss, msg.text,
+                  datetime.now(timezone.utc).isoformat(), delivered=False)
+    result = await route_mesh_message(msg)
+    return {"ok": True, **result}
+
+
 @app.post("/mesh/deliver")
 async def mesh_deliver(req: MeshMessageReq):
-    """Receive a message from a peer node for local delivery."""
-    now = datetime.now(timezone.utc).isoformat()
-    # Save to DB
-    conn = get_db()
-    conn.execute(
-        "INSERT INTO messages (from_ss, to_ss, text, created_at) VALUES (?, ?, ?, ?)",
-        (req.from_ss, req.target_ss, req.text, now),
-    )
-    conn.commit()
-    conn.close()
-    # Try local WebSocket delivery
-    await ws_mgr.send_to(req.target_ss, {
-        "text": req.text,
-        "from_ss": req.from_ss,
-        "to_ss": req.target_ss,
-        "created_at": now
-    })
-    return {"ok": True, "delivered": True}
+    """Legacy single-hop delivery endpoint — kept for older nodes/clients.
+
+    Wraps the payload into an envelope and routes it through the same path as
+    /mesh/ingest so behaviour stays consistent.
+    """
+    msg = MeshMessage.create(req.from_ss, req.target_ss, req.text)
+    if req.origin_node:
+        msg.path = [req.origin_node]
+    store_message(msg.msg_id, req.from_ss, req.target_ss, req.text,
+                  datetime.now(timezone.utc).isoformat(), delivered=False)
+    result = await route_mesh_message(msg)
+    return {"ok": True, "delivered": result["delivered_local"], **result}
 
 @app.get("/mesh/status")
 def mesh_status():
