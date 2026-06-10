@@ -47,9 +47,18 @@ class ChatActivity : AppCompatActivity() {
         binding.btnSend.setOnClickListener { sendMessage() }
         binding.btnBack.setOnClickListener { finish() }
         binding.btnAttach.setOnClickListener { filePicker.launch("*/*") }
+        binding.btnCall.setOnClickListener { startVideoCall() }
 
         loadMessages()
         connectWebSocket()
+    }
+
+    private fun startVideoCall() {
+        val intent = Intent(this, com.safarancho.pager.call.CallActivity::class.java)
+        intent.putExtra("my_ss", mySS)
+        intent.putExtra("peer_ss", contactSS)
+        intent.putExtra("incoming", false)
+        startActivity(intent)
     }
 
     private fun connectWebSocket() {

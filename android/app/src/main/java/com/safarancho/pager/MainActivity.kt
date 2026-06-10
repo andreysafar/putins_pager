@@ -278,6 +278,18 @@ class MainActivity : AppCompatActivity() {
         ws = client.newWebSocket(request, object : WebSocketListener() {
             override fun onMessage(webSocket: WebSocket, text: String) {
                 runOnUiThread { pulseLamp() }
+                // Incoming video call? Launch the call screen to answer.
+                try {
+                    val obj = org.json.JSONObject(text)
+                    if (obj.optString("type") == "call_signal") {
+                        val payload = obj.optJSONObject("payload")
+                        if (payload?.optString("kind") == "offer") {
+                            val from = obj.optString("from_ss")
+                            runOnUiThread { launchIncomingCall(ssId, from, payload.optString("sdp")) }
+                        }
+                        return
+                    }
+                } catch (_: Exception) {}
                 // Parse for unread badge update
                 try {
                     val msg = gson.fromJson(text, Message::class.java)
@@ -299,6 +311,15 @@ class MainActivity : AppCompatActivity() {
                 handler.postDelayed({ if (!isFinishing) connectWebSocket(ssId) }, 5000)
             }
         })
+    }
+
+    private fun launchIncomingCall(mySs: String, fromSs: String, offerSdp: String) {
+        val intent = Intent(this, com.safarancho.pager.call.CallActivity::class.java)
+        intent.putExtra("my_ss", mySs)
+        intent.putExtra("peer_ss", fromSs)
+        intent.putExtra("incoming", true)
+        intent.putExtra("offer_sdp", offerSdp)
+        startActivity(intent)
     }
 
     private fun pulseLamp() {
