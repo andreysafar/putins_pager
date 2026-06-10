@@ -1165,8 +1165,10 @@
 
                 // Regular message
                 const fromSs = d.from_ss || 'UNKNOWN';
-                const text = d.text || '';
                 lampFlash();
+                // Decrypt (if E2E envelope) before rendering, then continue.
+                (async () => {
+                const text = await maybeDecrypt(fromSs, d.text || '');
 
                 // Ensure chat tab exists
                 if (!chatTabs[fromSs]) {
@@ -1199,6 +1201,7 @@
                     chatTabs[fromSs].unread++;
                     renderChatTabs();
                 }
+                })();
             } catch(e) {}
         };
 
@@ -1233,10 +1236,13 @@
         }
 
         try {
+            // Encrypt for the wire if the recipient published a key; the local
+            // echo below still shows the plaintext we just typed.
+            const wireText = await maybeEncrypt(target, text);
             const res = await fetch('/message', {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({ text, target, from_ss: mySsId })
+                body: JSON.stringify({ text: wireText, target, from_ss: mySsId })
             });
             if (res.ok) {
                 const data = await res.json();
@@ -1436,6 +1442,7 @@
         document.getElementById('pager-housing').style.display = 'block';
         document.getElementById('my-id').textContent = `ID: ${mySsId}`;
         document.getElementById('brand-ssid').textContent = `| SS-ID: ${mySsId}`;
+        initCrypto();
         connectWS();
         loadContacts();
         loadMeshStatus();
@@ -1446,6 +1453,87 @@
                 ws.send(JSON.stringify({ type: 'get_presence' }));
             }
         }, 15000);
+    }
+
+    // ========== E2E ENCRYPTION ==========
+    // ECDH P-256 + AES-256-GCM, interoperable with Android CryptoBox (SPKI DER
+    // public keys, SHA-256(shared secret) → AES key, GCM with 128-bit tag).
+    // Transparent: only encrypts when the recipient has a published key; always
+    // falls back to plaintext so messaging never breaks.
+    let myKeyPair = null;
+    const peerKeyCache = {}; // ss_id -> CryptoKey (public)
+
+    function b64(buf) { return btoa(String.fromCharCode(...new Uint8Array(buf))); }
+    function unb64(s) { return Uint8Array.from(atob(s), c => c.charCodeAt(0)); }
+
+    async function initCrypto() {
+        try {
+            const stored = localStorage.getItem('pager_keypair');
+            if (stored) {
+                const jwk = JSON.parse(stored);
+                myKeyPair = {
+                    privateKey: await crypto.subtle.importKey('jwk', jwk.priv, { name: 'ECDH', namedCurve: 'P-256' }, true, ['deriveBits']),
+                    publicKey: await crypto.subtle.importKey('jwk', jwk.pub, { name: 'ECDH', namedCurve: 'P-256' }, true, []),
+                };
+            } else {
+                myKeyPair = await crypto.subtle.generateKey({ name: 'ECDH', namedCurve: 'P-256' }, true, ['deriveBits']);
+                const priv = await crypto.subtle.exportKey('jwk', myKeyPair.privateKey);
+                const pub = await crypto.subtle.exportKey('jwk', myKeyPair.publicKey);
+                localStorage.setItem('pager_keypair', JSON.stringify({ priv, pub }));
+            }
+            // Publish public key as base64(SPKI DER) to match Android's format.
+            const spki = await crypto.subtle.exportKey('spki', myKeyPair.publicKey);
+            await fetch('/keys', {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ ss_id: mySsId, pubkey: b64(spki) }),
+            });
+        } catch (e) { myKeyPair = null; /* crypto unavailable → plaintext mode */ }
+    }
+
+    async function getPeerKey(ssId) {
+        if (peerKeyCache[ssId]) return peerKeyCache[ssId];
+        try {
+            const res = await fetch('/keys/' + encodeURIComponent(ssId));
+            const data = await res.json();
+            if (!data.ok || !data.pubkey) return null;
+            const key = await crypto.subtle.importKey('spki', unb64(data.pubkey), { name: 'ECDH', namedCurve: 'P-256' }, true, []);
+            peerKeyCache[ssId] = key;
+            return key;
+        } catch (e) { return null; }
+    }
+
+    async function deriveAesKey(peerPub) {
+        const bits = await crypto.subtle.deriveBits({ name: 'ECDH', public: peerPub }, myKeyPair.privateKey, 256);
+        const hash = await crypto.subtle.digest('SHA-256', bits);
+        return crypto.subtle.importKey('raw', hash, { name: 'AES-GCM' }, false, ['encrypt', 'decrypt']);
+    }
+
+    async function maybeEncrypt(targetSs, plaintext) {
+        if (!myKeyPair) return plaintext;
+        const peerPub = await getPeerKey(targetSs);
+        if (!peerPub) return plaintext; // recipient has no key → send plaintext
+        try {
+            const aes = await deriveAesKey(peerPub);
+            const nonce = crypto.getRandomValues(new Uint8Array(12));
+            const ct = await crypto.subtle.encrypt({ name: 'AES-GCM', iv: nonce, tagLength: 128 }, aes, new TextEncoder().encode(plaintext));
+            return JSON.stringify({ enc: 1, n: b64(nonce), c: b64(ct) });
+        } catch (e) { return plaintext; }
+    }
+
+    function looksEncrypted(text) {
+        return typeof text === 'string' && text.startsWith('{') && text.includes('"enc"');
+    }
+
+    async function maybeDecrypt(fromSs, text) {
+        if (!myKeyPair || !looksEncrypted(text)) return text;
+        try {
+            const o = JSON.parse(text);
+            const peerPub = await getPeerKey(fromSs);
+            if (!peerPub) return text;
+            const aes = await deriveAesKey(peerPub);
+            const pt = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: unb64(o.n), tagLength: 128 }, aes, unb64(o.c));
+            return new TextDecoder().decode(pt);
+        } catch (e) { return '[🔒 не удалось расшифровать]'; }
     }
 
     // ========== VIDEO CALLS (WebRTC) ==========
