@@ -103,3 +103,62 @@ def test_mesh_hello_learns_peer_url(client):
 def test_health_ok(client):
     c, server = client
     assert c.get("/health").json()["status"] == "ok"
+
+
+def test_pubkey_publish_and_fetch(client):
+    c, server = client
+    r = c.post("/keys", json={"ss_id": "ss-key-pager", "pubkey": '{"kty":"EC","crv":"P-256","x":"a","y":"b"}'})
+    assert r.json()["ok"] is True
+    r2 = c.get("/keys/ss-key-pager")
+    assert r2.json()["ok"] is True
+    assert '"P-256"' in r2.json()["pubkey"]
+    # Unknown key → ok: False
+    assert c.get("/keys/ss-none-pager").json()["ok"] is False
+
+
+def test_pubkey_overwrite_updates(client):
+    c, server = client
+    c.post("/keys", json={"ss_id": "ss-k2-pager", "pubkey": "old"})
+    c.post("/keys", json={"ss_id": "ss-k2-pager", "pubkey": "new"})
+    assert c.get("/keys/ss-k2-pager").json()["pubkey"] == "new"
+
+
+def test_call_signal_relayed_between_clients(client):
+    c, server = client
+    with c.websocket_connect("/ws/ss-caller") as caller, \
+         c.websocket_connect("/ws/ss-callee") as callee:
+        caller.send_json({
+            "type": "call_signal",
+            "target": "ss-callee",
+            "payload": {"kind": "offer", "sdp": "fake-sdp"},
+        })
+        got = callee.receive_json()
+        assert got["type"] == "call_signal"
+        assert got["from_ss"] == "ss-caller"
+        assert got["payload"]["kind"] == "offer"
+        assert got["payload"]["sdp"] == "fake-sdp"
+
+
+def test_call_signal_unavailable_when_target_offline(client):
+    c, server = client
+    with c.websocket_connect("/ws/ss-caller") as caller:
+        caller.send_json({
+            "type": "call_signal",
+            "target": "ss-ghost",
+            "payload": {"kind": "offer", "sdp": "x"},
+        })
+        got = caller.receive_json()
+        assert got["payload"]["kind"] == "unavailable"
+        assert got["from_ss"] == "ss-ghost"
+
+
+def test_register_rate_limited(client):
+    c, server = client
+    codes = [c.post("/register", json={"display_name": f"u{i}"}).status_code for i in range(12)]
+    assert 429 in codes
+
+
+def test_message_rate_limit_allows_normal_traffic(client):
+    c, server = client
+    r = c.post("/message", json={"text": "hi", "target": "ss-aaaa-pager", "from_ss": "ss-bbbb-pager"})
+    assert r.status_code == 200

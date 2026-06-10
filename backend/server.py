@@ -14,9 +14,9 @@ from pathlib import Path
 from contextlib import asynccontextmanager
 from typing import Optional
 
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Query, UploadFile, File as FastAPIFile
+from fastapi import FastAPI, Request, WebSocket, WebSocketDisconnect, Query, UploadFile, File as FastAPIFile
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
@@ -381,6 +381,14 @@ def init_db():
         conn.execute("ALTER TABLE messages ADD COLUMN delivered INTEGER DEFAULT 0")
     conn.execute("CREATE INDEX IF NOT EXISTS idx_msg_id ON messages(msg_id)")
     conn.execute("CREATE INDEX IF NOT EXISTS idx_to_pending ON messages(to_ss, delivered)")
+    # Public keys for E2E encryption (JWK JSON published by clients).
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS pubkeys (
+            ss_id TEXT PRIMARY KEY,
+            pubkey TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+        )
+    """)
     conn.commit()
     conn.close()
 
@@ -449,6 +457,36 @@ def generate_ssid() -> str:
 # Bound message size so a single peer/client can't flood the mesh or DB.
 MAX_TEXT_LEN = 8192
 MAX_SSID_LEN = 64
+
+
+# --- Rate limiting (in-memory sliding window per key) ---
+class RateLimiter:
+    """Tiny sliding-window limiter. Keys are caller-defined (ip:endpoint)."""
+
+    def __init__(self):
+        self._hits: dict[str, list[float]] = {}
+
+    def allow(self, key: str, limit: int, window_s: float) -> bool:
+        now = time.time()
+        hits = self._hits.setdefault(key, [])
+        # Drop entries outside the window.
+        while hits and hits[0] < now - window_s:
+            hits.pop(0)
+        if len(hits) >= limit:
+            return False
+        hits.append(now)
+        # Bound memory across many keys.
+        if len(self._hits) > 10000:
+            self._hits = {k: v for k, v in self._hits.items() if v and v[-1] > now - window_s}
+        return True
+
+
+rate_limiter = RateLimiter()
+
+
+def client_key(request, bucket: str) -> str:
+    host = request.client.host if request and request.client else "unknown"
+    return f"{host}:{bucket}"
 
 # --- App Lifecycle ---
 async def start_mesh_tasks(app):
@@ -533,8 +571,47 @@ def get_contacts():
     """All contacts: local + mongo + mesh (same as /api/athletes)."""
     return api_athletes()
 
+class PubkeyReq(BaseModel):
+    ss_id: str
+    pubkey: str  # JWK JSON (EC P-256 public key)
+
+
+@app.post("/keys")
+async def publish_key(req: PubkeyReq):
+    """Publish a client's public key for E2E encryption.
+
+    Anyone can overwrite any key (the system has no auth by design), so E2E here
+    protects against passive reading of the DB/wire, not active impersonation —
+    documented limitation until envelopes are signed.
+    """
+    if not req.ss_id or len(req.ss_id) > MAX_SSID_LEN or len(req.pubkey) > 2048:
+        return {"ok": False, "error": "invalid key"}
+    now = datetime.now(timezone.utc).isoformat()
+    conn = get_db()
+    conn.execute(
+        "INSERT INTO pubkeys (ss_id, pubkey, updated_at) VALUES (?, ?, ?) "
+        "ON CONFLICT(ss_id) DO UPDATE SET pubkey = excluded.pubkey, updated_at = excluded.updated_at",
+        (req.ss_id, req.pubkey, now),
+    )
+    conn.commit()
+    conn.close()
+    return {"ok": True}
+
+
+@app.get("/keys/{ss_id}")
+def get_key(ss_id: str):
+    conn = get_db()
+    row = conn.execute("SELECT pubkey FROM pubkeys WHERE ss_id = ?", (ss_id,)).fetchone()
+    conn.close()
+    if row is None:
+        return {"ok": False, "pubkey": None}
+    return {"ok": True, "pubkey": row["pubkey"]}
+
+
 @app.post("/register")
-async def register_pager(req: RegisterReq):
+async def register_pager(req: RegisterReq, request: Request = None):
+    if request is not None and not rate_limiter.allow(client_key(request, "register"), limit=10, window_s=60):
+        return JSONResponse({"ok": False, "error": "rate limited"}, status_code=429)
     ssid = generate_ssid()
     label = req.display_name or req.label or req.name or ""
     now = datetime.now(timezone.utc).isoformat()
@@ -548,7 +625,9 @@ async def register_pager(req: RegisterReq):
     return {"ssid": ssid, "ss_id": ssid, "display_name": label, "created_at": now}
 
 @app.post("/message")
-async def send_message(req: MessageReq):
+async def send_message(req: MessageReq, request: Request = None):
+    if request is not None and not rate_limiter.allow(client_key(request, "message"), limit=60, window_s=60):
+        return JSONResponse({"ok": False, "error": "rate limited"}, status_code=429)
     # Input validation: bound sizes to protect the DB and mesh.
     if not req.text or len(req.text) > MAX_TEXT_LEN:
         return {"ok": False, "error": "text empty or too long"}
@@ -626,6 +705,25 @@ async def ws_endpoint(ws: WebSocket, ss_id: str):
                         "type": "presence",
                         "contacts": ws_mgr.get_all_presence()
                     })
+
+                elif msg_type == "call_signal":
+                    # WebRTC signaling relay: offer/answer/ICE/end between two
+                    # SSIDs connected to this node. Media then flows P2P.
+                    target = msg.get("target", "")
+                    payload = msg.get("payload", {})
+                    if target and ws_mgr.connections.get(target):
+                        await ws_mgr.send_to(target, {
+                            "type": "call_signal",
+                            "from_ss": ss_id,
+                            "payload": payload,
+                        })
+                    else:
+                        # Tell the caller the target can't take calls right now.
+                        await ws.send_json({
+                            "type": "call_signal",
+                            "from_ss": target,
+                            "payload": {"kind": "unavailable"},
+                        })
 
                 elif "target" in msg and "text" in msg:
                     # Forward message
@@ -728,8 +826,10 @@ def health():
     return {"status": "ok", "node_id": NODE_ID, "peers": len(mesh.peers)}
 
 @app.post("/upload")
-async def upload_file(file: UploadFile = FastAPIFile(...)):
+async def upload_file(request: Request, file: UploadFile = FastAPIFile(...)):
     """Upload a file and return its URL."""
+    if not rate_limiter.allow(client_key(request, "upload"), limit=20, window_s=60):
+        return JSONResponse({"ok": False, "error": "rate limited"}, status_code=429)
     # Sanitize filename: keep extension, add uuid prefix
     import re
     original_name = file.filename or "unnamed"
