@@ -22,7 +22,12 @@ jobs:
           cache-dependency-path: backend/requirements.txt
 
       - name: Install dependencies
-        run: pip install -r requirements.txt
+        run: |
+          pip install -r requirements.txt
+          pip install pytest
 
       - name: Syntax check
         run: python -m compileall -q .
+
+      - name: Run tests
+        run: python -m pytest -q
