@@ -162,3 +162,47 @@ def test_message_rate_limit_allows_normal_traffic(client):
     c, server = client
     r = c.post("/message", json={"text": "hi", "target": "ss-aaaa-pager", "from_ss": "ss-bbbb-pager"})
     assert r.status_code == 200
+
+
+def test_nezhri_bridge_forwards_with_label(client, monkeypatch):
+    """notify_nezhri_telegram posts to NeZhri with the sender's label and key."""
+    import asyncio
+    c, server = client
+    sender = c.post("/register", json={"display_name": "Капитан"}).json()["ss_id"]
+    server.NEZHRI_NOTIFY_URL = "https://nezhri.example/api/pager/notify"
+    server.NEZHRI_NOTIFY_API_KEY = "k"
+
+    captured = {}
+
+    class _Resp:
+        status_code = 200
+
+    class _FakeClient:
+        def __init__(self, *a, **kw):
+            pass
+        async def __aenter__(self):
+            return self
+        async def __aexit__(self, *a):
+            return False
+        async def post(self, url, json=None, headers=None):
+            captured["url"] = url
+            captured["json"] = json
+            captured["headers"] = headers
+            return _Resp()
+
+    monkeypatch.setattr(server.httpx, "AsyncClient", _FakeClient)
+    asyncio.get_event_loop().run_until_complete(
+        server.notify_nezhri_telegram(sender, "ss-deadbeef-pager", "Привет")
+    )
+    assert captured["url"] == server.NEZHRI_NOTIFY_URL
+    assert captured["json"]["to_ssid"] == "ss-deadbeef-pager"
+    assert captured["json"]["from_name"] == "Капитан"
+    assert captured["headers"]["X-API-Key"] == "k"
+
+
+def test_message_still_ok_with_bridge_unconfigured(client):
+    """/message keeps working when the NeZhri bridge is not configured."""
+    c, server = client
+    server.NEZHRI_NOTIFY_URL = ""
+    r = c.post("/message", json={"from_ss": "ss-aaaa-pager", "target": "ss-bbbb-pager", "text": "hi"})
+    assert r.json()["ok"] is True
