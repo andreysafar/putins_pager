@@ -47,6 +47,13 @@ NODE_ID = os.getenv("NODE_ID", f"node-{secrets.token_hex(3)}")
 NODE_URL = os.getenv("NODE_URL", f"http://localhost:{PORT}")
 MESH_PING_INTERVAL = 30  # seconds
 
+# --- NeZhri Telegram bridge ---
+# When a "написать спортсмену" message is sent from the Iron Siber leaderboard,
+# we also forward it to the recipient's Telegram via the NeZhri bot so they get
+# it even if they're not on the pager mesh right now. Best-effort, fire-and-forget.
+NEZHRI_NOTIFY_URL = os.getenv("NEZHRI_NOTIFY_URL", "")  # e.g. https://safargaleev.com/api/pager/notify
+NEZHRI_NOTIFY_API_KEY = os.getenv("NEZHRI_NOTIFY_API_KEY", "")
+
 # --- DB ---
 def get_db():
     conn = sqlite3.connect(DB_PATH)
@@ -624,6 +631,46 @@ async def register_pager(req: RegisterReq, request: Request = None):
     conn.close()
     return {"ssid": ssid, "ss_id": ssid, "display_name": label, "created_at": now}
 
+def label_for_ssid(ss_id: str) -> str:
+    """Human-readable name for an SSID (used when forwarding to Telegram)."""
+    if not ss_id:
+        return ""
+    try:
+        conn = get_db()
+        row = conn.execute("SELECT label FROM ssids WHERE ssid = ?", (ss_id,)).fetchone()
+        conn.close()
+        if row and row["label"]:
+            return row["label"]
+    except Exception:
+        pass
+    return ""
+
+
+async def notify_nezhri_telegram(from_ss: str, to_ss: str, text: str) -> None:
+    """Forward a leaderboard message to the recipient's Telegram via NeZhri.
+
+    Best-effort: any failure is swallowed so the pager's own delivery is never
+    affected. NeZhri resolves to_ss → Telegram user and adds the sender name.
+    """
+    if not (NEZHRI_NOTIFY_URL and NEZHRI_NOTIFY_API_KEY):
+        return
+    payload = {
+        "to_ssid": to_ss,
+        "from_ssid": from_ss,
+        "from_name": label_for_ssid(from_ss),
+        "text": text,
+    }
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            await client.post(
+                NEZHRI_NOTIFY_URL,
+                json=payload,
+                headers={"X-API-Key": NEZHRI_NOTIFY_API_KEY},
+            )
+    except Exception as e:
+        print(f"[nezhri] notify failed for {to_ss}: {e}")
+
+
 @app.post("/message")
 async def send_message(req: MessageReq, request: Request = None):
     if request is not None and not rate_limiter.allow(client_key(request, "message"), limit=60, window_s=60):
@@ -639,6 +686,11 @@ async def send_message(req: MessageReq, request: Request = None):
 
     # Persist immediately (store-and-forward); delivery status updated below.
     store_message(msg.msg_id, req.from_ss, req.target, req.text, now, delivered=False)
+
+    # Mirror to the recipient's Telegram via NeZhri (fire-and-forget) so a
+    # "написать спортсмену" message from the leaderboard always reaches them,
+    # online or not. Does not affect pager delivery below.
+    asyncio.create_task(notify_nezhri_telegram(req.from_ss, req.target, req.text))
 
     # Local delivery shortcut.
     if ws_mgr.connections.get(req.target):
