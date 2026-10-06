@@ -394,3 +394,22 @@ def test_cleanup_drops_unused_anonymous_ssids_only(client):
     assert ghost not in left
     assert {talker, starred, "ss-a7a7a7a7-pager"} <= left
     assert removed["ssids"] == 1
+
+
+def test_sent_message_is_echoed_to_the_senders_other_tabs_with_client_id(client):
+    c, server = client
+    me = c.post("/register", json={"display_name": "Me"}).json()["ss_id"]
+    peer = c.post("/register", json={"display_name": "Peer"}).json()["ss_id"]
+    mid = "ab" * 16
+    with c.websocket_connect(f"/ws/{me}") as other_tab, c.websocket_connect(f"/ws/{peer}") as p:
+        r = c.post("/message", json={"text": "hi", "target": peer, "from_ss": me, "msg_id": mid}).json()
+        assert r["msg_id"] == mid
+        echo = other_tab.receive_json()
+        while echo.get("type") == "presence":  # the peer's arrival comes first
+            echo = other_tab.receive_json()
+        assert (echo["type"], echo["to_ss"], echo["msg_id"], echo["text"]) == ("sent", peer, mid, "hi")
+        got = p.receive_json()
+        assert got["msg_id"] == mid and "type" not in got
+    # a malformed client id is replaced by a server one
+    r = c.post("/message", json={"text": "x", "target": peer, "from_ss": me, "msg_id": "nope"}).json()
+    assert len(r["msg_id"]) == 32 and r["msg_id"] != "nope"

@@ -7,6 +7,7 @@ import tarfile
 import io
 import uuid
 import json
+import re
 import time
 import httpx
 from datetime import datetime, timezone
@@ -433,6 +434,9 @@ class MessageReq(BaseModel):
     text: str
     target: str
     from_ss: str = ""
+    # Client-made id (32 hex): the sending tab knows it before the reply, so
+    # the echo to its other tabs never shows the message twice.
+    msg_id: str = ""
 
 class RegisterReq(BaseModel):
     label: str = ""
@@ -1027,7 +1031,17 @@ async def send_message(req: MessageReq, request: Request = None):
         return {"ok": False, "error": "invalid target"}
 
     msg = MeshMessage.create(req.from_ss, req.target, req.text)
+    if re.fullmatch(r"[0-9a-f]{32}", req.msg_id or ""):
+        msg.msg_id = req.msg_id
     now = datetime.now(timezone.utc).isoformat()
+
+    # The sender's other tabs/devices on this node see what was sent — one
+    # session shows the whole conversation, whichever tab wrote it.
+    if req.from_ss and req.from_ss != req.target:
+        await ws_mgr.send_to(req.from_ss, {
+            "type": "sent", "text": req.text, "from_ss": req.from_ss, "to_ss": req.target,
+            "created_at": now, "msg_id": msg.msg_id,
+        })
 
     # Persist immediately (store-and-forward); delivery status updated below.
     store_message(msg.msg_id, req.from_ss, req.target, req.text, now, delivered=False)
@@ -1131,7 +1145,8 @@ async def ws_endpoint(ws: WebSocket, ss_id: str):
 
                 elif "target" in msg and "text" in msg:
                     # Forward message
-                    await send_message(MessageReq(text=msg["text"], target=msg["target"], from_ss=ss_id))
+                    await send_message(MessageReq(text=msg["text"], target=msg["target"], from_ss=ss_id,
+                                                  msg_id=str(msg.get("msg_id", ""))))
 
             except json.JSONDecodeError:
                 ws_mgr.presence.touch(session.sid)
@@ -1246,7 +1261,6 @@ async def upload_file(request: Request, file: UploadFile = FastAPIFile(...)):
     if not rate_limiter.allow(client_key(request, "upload"), limit=20, window_s=60):
         return JSONResponse({"ok": False, "error": "rate limited"}, status_code=429)
     # Sanitize filename: keep extension, add uuid prefix
-    import re
     original_name = file.filename or "unnamed"
     safe_name = re.sub(r'[^\w\.\-]', '_', original_name)
     unique_name = f"{uuid.uuid4().hex[:8]}_{safe_name}"
