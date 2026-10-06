@@ -273,6 +273,54 @@
         .status-offline { background: var(--offline); }
         .status-zombie { background: var(--zombie); box-shadow: 0 0 4px var(--zombie); }
         .status-killed { background: var(--killed); box-shadow: 0 0 4px var(--killed); }
+        /* Zombie: alive on paper, not answering — make it impossible to miss. */
+        .status-zombie { animation: zombie-pulse 1.6s ease-in-out infinite; }
+        @keyframes zombie-pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.25; } }
+
+        /* ========== PHONE BOOK (Избранное / Ближайшие ноды / Удалённые) ========== */
+        .phonebook {
+            max-height: 190px;
+            overflow-y: auto;
+            background: rgba(42,58,26,0.10);
+            border-bottom: 1px solid rgba(42,58,26,0.2);
+            font-size: 0.55rem;
+            color: var(--lcd-dark);
+        }
+        .pb-legend {
+            display: flex; gap: 10px; flex-wrap: wrap;
+            padding: 3px 8px; font-size: 0.45rem; opacity: 0.75;
+        }
+        .pb-legend span { display: inline-flex; align-items: center; gap: 3px; }
+        .pb-legend .status-indicator { display: inline-block; }
+        .pb-group > summary, .pb-node > summary {
+            list-style: none; cursor: pointer; user-select: none;
+            display: flex; align-items: center; gap: 6px;
+            padding: 4px 8px;
+        }
+        .pb-group > summary::-webkit-details-marker, .pb-node > summary::-webkit-details-marker { display: none; }
+        .pb-group > summary { font-weight: bold; letter-spacing: 1px; background: rgba(42,58,26,0.12); }
+        .pb-node > summary { padding-left: 18px; opacity: 0.9; }
+        .pb-group > summary::before, .pb-node > summary::before { content: '▸'; width: 8px; }
+        .pb-group[open] > summary::before, .pb-node[open] > summary::before { content: '▾'; }
+        .pb-counts { margin-left: auto; display: inline-flex; gap: 6px; font-weight: normal; opacity: 0.8; }
+        .pb-row {
+            display: flex; align-items: center; gap: 6px;
+            padding: 3px 8px 3px 30px; cursor: pointer;
+        }
+        .pb-group-flat .pb-row { padding-left: 18px; }
+        .pb-row:hover { background: rgba(42,58,26,0.18); }
+        .pb-row.active-chat { background: rgba(42,58,26,0.26); }
+        .pb-row.is-zombie .pb-name { font-style: italic; }
+        .pb-row.is-offline { opacity: 0.6; }
+        .pb-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .pb-meta { font-size: 0.45rem; opacity: 0.7; white-space: nowrap; }
+        .pb-star { background: none; border: none; cursor: pointer; font-size: 0.7rem; color: var(--amber); padding: 0 2px; }
+        .pb-empty { padding: 4px 30px; opacity: 0.5; font-size: 0.5rem; }
+
+        /* ========== SESSION OFFER (link from Telegram) ========== */
+        #session-offer { display: none; }
+        #session-offer .reg-subtitle b { color: var(--lcd-dark); }
+        .reg-btn.secondary { background: transparent; color: var(--lcd-dark); margin-top: 10px; }
 
         /* ========== MESSAGES AREA ========== */
         .messages-area {
@@ -733,7 +781,17 @@
     <input type="text" id="reg-name" placeholder="Твое имя (никнейм)" style="width:80%;padding:10px;margin-bottom:10px;background:#0d1a0d;border:1px solid #00ff00;color:#00ff00;font-family:monospace;text-align:center;">
     <input type="text" id="reg-display" placeholder="Отображаемое имя" style="width:80%;padding:10px;margin-bottom:15px;background:#0d1a0d;border:1px solid #00ff00;color:#00ff00;font-family:monospace;text-align:center;">
     <button class="reg-btn" onclick="registerAnon()">⚡ ПОЛУЧИТЬ SSID</button>
+    <div class="reg-subtitle" id="reg-hint" style="display:none;margin-top:14px"></div>
     <div class="reg-footer">SPORTS-PUNK EDITION 🦾⚙️</div>
+</div>
+
+<!-- ========== SESSION OFFER (link from a Telegram notification) ========== -->
+<div id="session-offer" style="flex-direction:column;align-items:center;justify-content:center;min-height:60vh;padding:20px;text-align:center">
+    <div class="reg-pager-icon">📟</div>
+    <div class="reg-title">НОВАЯ СЕССИЯ</div>
+    <div class="reg-subtitle" id="offer-text"></div>
+    <button class="reg-btn" id="offer-start" onclick="acceptSessionOffer()">▶ НАЧАТЬ СЕССИЮ</button>
+    <button class="reg-btn secondary" id="offer-stay" onclick="declineSessionOffer()" style="display:none"></button>
 </div>
 
 <!-- ========== PAGER HOUSING ========== -->
@@ -770,9 +828,9 @@
         <div class="target-row" style="background:rgba(42,58,26,0.08);">
             <span>🔍</span>
             <input type="text" id="contact-search" placeholder="Search contacts..." oninput="onContactSearch()" style="font-size:0.6rem;">
-            <button onclick="toggleShowAll()" id="btn-show-all" style="font-size:0.45rem;padding:2px 8px;background:rgba(42,58,26,0.15);border:1px solid rgba(42,58,26,0.3);border-radius:3px;color:var(--lcd-dark);cursor:pointer;font-family:'Share Tech Mono',monospace;" title="Toggle show all contacts">👁 ALL</button>
+            <button onclick="toggleShowAll()" id="btn-show-all" style="font-size:0.45rem;padding:2px 8px;background:rgba(42,58,26,0.15);border:1px solid rgba(42,58,26,0.3);border-radius:3px;color:var(--lcd-dark);cursor:pointer;font-family:'Share Tech Mono',monospace;" title="Скрыть оффлайн">👁 ALL</button>
         </div>
-        <div class="contacts-bar" id="contacts-bar">
+        <div class="phonebook" id="contacts-bar">
             <span style="font-size:0.5rem; color:rgba(42,58,26,0.4); padding:4px;">⏳ SCANNING...</span>
         </div>
 
@@ -863,8 +921,24 @@
     let pingInterval = null;
     let reconnectAttempts = 0;
     const MAX_RECONNECT_DELAY = 30000;
-    let showAllContacts = true; // show all by default, toggle to filter
+    let showAllContacts = true; // false → hide offline contacts (favourites always shown)
     let contactSearchQuery = '';
+    let phonebookData = null;      // /phonebook: favorites / nearby / remote
+    // Deep links: ?to=<ss> (the «Написать» button on iron-siberia.ru) and
+    // ?login=<code>&to=<ss> (the «продолжить диалог» link from Telegram).
+    const urlParams = new URLSearchParams(location.search);
+    let pendingChat = urlParams.get('to') || null;
+    let pendingChatName = '';
+    let offerClaim = null;
+    const STATUS_LABEL = { online: 'онлайн', zombie: 'зомби — не отвечает', offline: 'оффлайн' };
+
+    function escapeHtml(s) {
+        return String(s ?? '').replace(/[&<>"']/g, ch =>
+            ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]));
+    }
+    function clearDeepLink() {
+        if (location.search) history.replaceState(null, '', location.pathname);
+    }
 
     // ========== CONTACT STATUS TRACKING ==========
     // Server tracks last_seen per WebSocket connection
@@ -908,6 +982,7 @@
             if (data.ssid || data.ss_id) {
                 mySsId = data.ssid || data.ss_id;
                 localStorage.setItem('pager_ss_id', mySsId);
+                document.getElementById('reg-screen').style.display = 'none';
                 initApp();
             }
         } catch(e) {
@@ -933,56 +1008,164 @@
         msgs.scrollTop = msgs.scrollHeight;
     }
 
-    // ========== CONTACTS ==========
+    // ========== PHONE BOOK ==========
+    // Избранное / Ближайшие ноды (эта нода + прямые соседи) / Удалённые
+    // контакты (соседи соседей). Statuses: online / zombie / offline.
     async function loadContacts() {
         const bar = document.getElementById('contacts-bar');
-        bar.innerHTML = '<span style="font-size:0.5rem; color:rgba(42,58,26,0.4); padding:4px;" class="loading">⏳ SCANNING MESH...</span>';
+        if (!phonebookData) {
+            bar.innerHTML = '<span style="font-size:0.5rem; color:rgba(42,58,26,0.4); padding:4px;" class="loading">⏳ SCANNING MESH...</span>';
+        }
         try {
-            const res = await fetch('/contacts');
-            const athletes = await res.json();
-            allContacts = athletes.map(a => ({
-                ss_id: a.ss_id,
-                display_name: (a.display_name || a.first_name || a.username || a.name || 'USER').toUpperCase(),
-                status: contactStatuses[a.ss_id] || 'offline'
-            }));
+            const res = await fetch('/phonebook?ss_id=' + encodeURIComponent(mySsId || ''));
+            phonebookData = await res.json();
+            indexPhonebook();
             renderContactsBar();
             renderChatTabs();
         } catch(e) {
-            bar.innerHTML = '<span style="font-size:0.5rem; color:var(--killed); padding:4px;">⚠ CONTACTS OFFLINE</span>';
+            if (!phonebookData) bar.innerHTML = '<span style="font-size:0.5rem; color:var(--killed); padding:4px;">⚠ CONTACTS OFFLINE</span>';
         }
+    }
+
+    function phonebookNodes() {
+        if (!phonebookData) return [];
+        return [...phonebookData.nearby.nodes, ...phonebookData.remote.nodes];
+    }
+
+    function indexPhonebook() {
+        const seen = {};
+        allContacts = [];
+        const add = c => {
+            if (seen[c.ss_id]) return;
+            seen[c.ss_id] = true;
+            contactStatuses[c.ss_id] = c.status;
+            allContacts.push({ ...c, display_name: (c.display_name || 'USER').toUpperCase() });
+        };
+        phonebookData.favorites.contacts.forEach(add);
+        phonebookNodes().forEach(n => n.contacts.forEach(add));
+        // Tabs opened before the phone book arrived (queued messages) get names.
+        for (const [ssId, tab] of Object.entries(chatTabs)) {
+            const c = allContacts.find(x => x.ss_id === ssId);
+            if (c && tab.name === ssId) tab.name = c.display_name;
+        }
+    }
+
+    function statusOf(c) { return contactStatuses[c.ss_id] || c.status || 'offline'; }
+
+    function isGroupOpen(key, dflt) {
+        try {
+            const v = localStorage.getItem('pb_open_' + key);
+            return v === null ? dflt : v === '1';
+        } catch (e) { return dflt; }
+    }
+
+    function contactVisible(c) {
+        if (contactSearchQuery) {
+            const q = contactSearchQuery.toLowerCase();
+            return (c.display_name || '').toLowerCase().includes(q)
+                || (c.ss_id || '').toLowerCase().includes(q)
+                || (c.node_id || '').toLowerCase().includes(q);
+        }
+        return showAllContacts || statusOf(c) !== 'offline' || !!chatTabs[c.ss_id];
+    }
+
+    function countsHtml(list) {
+        const n = { online: 0, zombie: 0, offline: 0 };
+        list.forEach(c => { n[statusOf(c)] = (n[statusOf(c)] || 0) + 1; });
+        return `<span class="pb-counts" title="онлайн / зомби / оффлайн">🟢${n.online} 🧟${n.zombie} ⚪${n.offline}</span>`;
+    }
+
+    function rowHtml(c) {
+        const st = statusOf(c);
+        const meta = [];
+        if (c.kind === 'athlete') meta.push('🏊 атлет');
+        if (c.hops > 1) meta.push(`${c.hops} хоп${c.hops < 5 ? 'а' : 'ов'}`);
+        if (st === 'zombie') meta.push('🧟');
+        const active = chatTabs[c.ss_id] ? 'active-chat' : '';
+        const name = (c.display_name || c.ss_id).toUpperCase();
+        return `<div class="pb-row is-${st} ${active}" data-ss="${escapeHtml(c.ss_id)}" data-name="${escapeHtml(name)}"
+                     title="${escapeHtml(c.ss_id)} · ${STATUS_LABEL[st] || st}${c.node_id ? ' · ' + escapeHtml(c.node_id) : ''}">
+            <span class="status-indicator ${getStatusClass(st)}"></span>
+            <span class="pb-name">${escapeHtml(name)}</span>
+            <span class="pb-meta">${meta.join(' · ')}</span>
+            <button class="pb-star" data-star="${escapeHtml(c.ss_id)}" title="${c.favorite ? 'Убрать из избранного' : 'В избранное'}">${c.favorite ? '★' : '☆'}</button>
+        </div>`;
+    }
+
+    function nodeHtml(n) {
+        const visible = n.contacts.filter(contactVisible);
+        if (contactSearchQuery && !visible.length) return '';
+        const key = 'node_' + n.node_id;
+        const label = n.self
+            ? `📍 ${escapeHtml(n.node_id)} · эта нода`
+            : `<span class="status-indicator ${getStatusClass(n.status)}"></span> ${escapeHtml(n.node_id)} · ${n.hops} хоп${n.hops > 1 ? 'а' : ''}${n.status === 'zombie' ? ' · 🧟 нода молчит' : ''}`;
+        const rows = visible.length ? visible.map(rowHtml).join('') : '<div class="pb-empty">никого в сети</div>';
+        const open = contactSearchQuery || isGroupOpen(key, n.self);
+        return `<details class="pb-node" data-key="${escapeHtml(key)}" ${open ? 'open' : ''}>
+            <summary>${label} ${countsHtml(n.contacts)}</summary>${rows}</details>`;
+    }
+
+    function groupHtml(key, title, inner, people, dfltOpen) {
+        const open = contactSearchQuery || isGroupOpen(key, dfltOpen);
+        return `<details class="pb-group" data-key="${key}" ${open ? 'open' : ''}>
+            <summary>${title} ${countsHtml(people)}</summary>${inner}</details>`;
     }
 
     function renderContactsBar() {
         const bar = document.getElementById('contacts-bar');
-        let visible = allContacts;
+        if (!phonebookData) return;
+        const scroll = bar.scrollTop;
+        const legend = '<div class="pb-legend"><span><i class="status-indicator status-online"></i>онлайн</span>'
+            + '<span><i class="status-indicator status-zombie"></i>зомби: висит, но не отвечает</span>'
+            + '<span><i class="status-indicator status-offline"></i>оффлайн</span></div>';
 
-        // Filter by search query
-        if (contactSearchQuery) {
-            const q = contactSearchQuery.toLowerCase();
-            visible = visible.filter(c => {
-                const name = (c.display_name || '').toLowerCase();
-                const ssid = (c.ss_id || '').toLowerCase();
-                return name.includes(q) || ssid.includes(q);
-            });
-        } else if (!showAllContacts) {
-            // Show only contacts with active chats (have messages)
-            visible = visible.filter(c => {
-                const tab = chatTabs[c.ss_id];
-                return tab && tab.messages && tab.messages.length > 0;
-            });
-        }
+        const favs = phonebookData.favorites.contacts;
+        const favRows = favs.filter(contactVisible).map(rowHtml).join('')
+            || '<div class="pb-empty">☆ — добавь контакт в избранное</div>';
+        const nearby = phonebookData.nearby.nodes;
+        const remote = phonebookData.remote.nodes;
+        const people = nodes => nodes.flatMap(n => n.contacts);
 
-        if (!visible.length) {
-            bar.innerHTML = '<span style="font-size:0.5rem; color:rgba(42,58,26,0.4); padding:4px;">NO CONTACTS</span>';
-            return;
-        }
-        bar.innerHTML = visible.map(c => {
-            const isActive = chatTabs[c.ss_id] ? 'active-chat' : '';
-            return `<div class="contact-chip ${isActive}" onclick="openChat('${c.ss_id}')" title="${c.ss_id}">
-                <span class="status-indicator ${getStatusClass(c.status)}"></span>
-                <span>${c.display_name}</span>
-            </div>`;
-        }).join('');
+        bar.innerHTML = legend
+            + groupHtml('favorites', '★ ИЗБРАННОЕ', `<div class="pb-group-flat">${favRows}</div>`, favs, true)
+            + groupHtml('nearby', '📡 БЛИЖАЙШИЕ НОДЫ', nearby.map(nodeHtml).join(''), people(nearby), true)
+            + groupHtml('remote', '🛰 УДАЛЁННЫЕ (соседи соседей)',
+                remote.map(nodeHtml).join('') || '<div class="pb-empty">соседей соседей пока не видно</div>',
+                people(remote), false);
+        bar.scrollTop = scroll;
+    }
+
+    async function toggleFavorite(ssId) {
+        const c = allContacts.find(x => x.ss_id === ssId);
+        const base = '/favorites/' + encodeURIComponent(mySsId);
+        try {
+            if (c && c.favorite) {
+                await fetch(base + '/' + encodeURIComponent(ssId), { method: 'DELETE' });
+            } else {
+                await fetch(base, {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ contact: ssId, display_name: c ? c.display_name : '' }),
+                });
+            }
+        } catch (e) {}
+        loadContacts();
+    }
+
+    function initPhonebookEvents() {
+        const bar = document.getElementById('contacts-bar');
+        bar.addEventListener('click', e => {
+            const star = e.target.closest('[data-star]');
+            if (star) { e.preventDefault(); e.stopPropagation(); toggleFavorite(star.dataset.star); return; }
+            const row = e.target.closest('.pb-row');
+            if (row) openChat(row.dataset.ss, row.dataset.name);
+        });
+        // <details> toggle does not bubble — listen in the capture phase.
+        bar.addEventListener('toggle', e => {
+            const key = e.target.dataset && e.target.dataset.key;
+            if (key && !contactSearchQuery) {
+                try { localStorage.setItem('pb_open_' + key, e.target.open ? '1' : '0'); } catch (err) {}
+            }
+        }, true);
     }
 
     function onContactSearch() {
@@ -994,21 +1177,56 @@
     function toggleShowAll() {
         showAllContacts = !showAllContacts;
         const btn = document.getElementById('btn-show-all');
-        btn.textContent = showAllContacts ? '🔒 ACTIVE' : '👁 ALL';
+        btn.textContent = showAllContacts ? '👁 ALL' : '🟢 LIVE';
         renderContactsBar();
     }
 
     // ========== CHAT TABS ==========
-    function openChat(ssId) {
-        const contact = allContacts.find(c => c.ss_id === ssId);
-        const name = contact ? contact.display_name : ssId;
+    function ensureTab(ssId, nameHint) {
         if (!chatTabs[ssId]) {
-            chatTabs[ssId] = { name, messages: [], unread: 0 };
+            const contact = allContacts.find(c => c.ss_id === ssId);
+            const name = contact ? contact.display_name : ((nameHint || '').toUpperCase() || ssId);
+            chatTabs[ssId] = { name, messages: [], unread: 0, ids: new Set(), loaded: false };
         }
+        return chatTabs[ssId];
+    }
+
+    function openChat(ssId, nameHint) {
+        const tab = ensureTab(ssId, nameHint);
         activeChatId = ssId;
+        tab.unread = 0;
         document.getElementById('target').value = ssId;
         renderChatTabs();
         renderMessages();
+        renderContactsBar();
+        if (!tab.loaded) loadHistory(ssId);
+    }
+
+    // History from the node — a session started from Telegram continues the
+    // dialog instead of opening an empty chat.
+    async function loadHistory(peer) {
+        const tab = chatTabs[peer];
+        if (!tab || tab.loaded) return;
+        tab.loaded = true;
+        try {
+            const res = await fetch(`/messages/${encodeURIComponent(mySsId)}?with=${encodeURIComponent(peer)}&limit=50`);
+            const rows = (await res.json()).reverse();
+            const older = [];
+            for (const m of rows) {
+                if (m.msg_id && tab.ids.has(m.msg_id)) continue;
+                if (m.msg_id) tab.ids.add(m.msg_id);
+                const outbound = m.from_ss === mySsId;
+                const text = await maybeDecrypt(peer, m.text || '');
+                const { el, metaEl, textEl } = typewriterText(text, outbound);
+                const when = m.created_at ? new Date(m.created_at).toLocaleString() : '';
+                metaEl.textContent = `[${when}] ${outbound ? 'TO: ' + peer : 'FROM: ' + peer}`;
+                textEl.textContent = text;
+                el.classList.add('typing-done');
+                older.push({ html: el.outerHTML, text, msg_id: m.msg_id });
+            }
+            tab.messages = [...older, ...tab.messages];
+            if (activeChatId === peer) renderMessages();
+        } catch (e) { tab.loaded = false; }
     }
 
     function renderChatTabs() {
@@ -1020,14 +1238,14 @@
         }
         tabsEl.innerHTML = tabIds.map(ssId => {
             const tab = chatTabs[ssId];
-            const contact = allContacts.find(c => c.ss_id === ssId);
-            const status = contact ? contact.status : 'offline';
+            const status = contactStatuses[ssId] || 'offline';
             const isActive = ssId === activeChatId ? 'active' : '';
             const badge = tab.unread > 0 ? `<span class="tab-new-badge">${tab.unread}</span>` : '';
-            return `<div class="chat-tab ${isActive}" onclick="switchTab('${ssId}')">
+            const sid = escapeHtml(JSON.stringify(ssId));
+            return `<div class="chat-tab ${isActive}" onclick="switchTab(${sid})">
                 <span class="tab-status" style="background:${getStatusColor(status)}"></span>
-                ${tab.name}${badge}
-                <span class="tab-close" onclick="event.stopPropagation();closeTab('${ssId}')">×</span>
+                ${escapeHtml(tab.name)}${badge}
+                <span class="tab-close" onclick="event.stopPropagation();closeTab(${sid})">×</span>
             </div>`;
         }).join('');
     }
@@ -1064,7 +1282,7 @@
         }
         const chat = chatTabs[activeChatId];
         if (!chat.messages.length) {
-            msgs.innerHTML = `<div class="empty-chat"><div class="pager-icon">📟</div><div>Нет сообщений с ${chat.name}</div></div>`;
+            msgs.innerHTML = `<div class="empty-chat"><div class="pager-icon">📟</div><div>Нет сообщений с ${escapeHtml(chat.name)}</div></div>`;
             return;
         }
         msgs.innerHTML = chat.messages.map(m => m.html).join('');
@@ -1082,6 +1300,16 @@
         div.appendChild(metaDiv);
         div.appendChild(textDiv);
         return { el: div, metaEl: metaDiv, textEl: textDiv };
+    }
+
+    // The bubble as it looks once typed — what a chat tab keeps. Storing the
+    // element before the typewriter ran kept an empty bubble for every message
+    // that arrived in a chat that wasn't open.
+    function finishedHtml(el, text) {
+        const copy = el.cloneNode(true);
+        copy.querySelector('.msg-text').textContent = text;
+        copy.classList.add('typing-done');
+        return copy.outerHTML;
     }
 
     function animateText(el, text, callback) {
@@ -1123,7 +1351,7 @@
     }
 
     function connectWS() {
-        if (ws) { try { ws.close(); } catch(e) {} }
+        if (ws) { try { ws.onclose = null; ws.close(1000); } catch(e) {} }
         updateWsStatus('reconnecting');
 
         const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
@@ -1138,6 +1366,7 @@
                     ws.send(JSON.stringify({ type: 'ping', ts: Date.now() }));
                 }
             }, 10000);
+            ws.send(JSON.stringify({ type: 'get_presence' }));
             // Refresh contacts on reconnect
             loadContacts();
             loadMeshStatus();
@@ -1147,7 +1376,8 @@
             try {
                 const d = JSON.parse(e.data);
 
-                // Handle presence updates from server
+                if (d.type === 'pong') return;
+                // Handle presence updates from server (only what changed)
                 if (d.type === 'presence') {
                     d.contacts.forEach(c => {
                         contactStatuses[c.ss_id] = c.status;
@@ -1170,11 +1400,11 @@
                 (async () => {
                 const text = await maybeDecrypt(fromSs, d.text || '');
 
-                // Ensure chat tab exists
-                if (!chatTabs[fromSs]) {
-                    const contact = allContacts.find(c => c.ss_id === fromSs);
-                    const name = contact ? contact.display_name : fromSs;
-                    chatTabs[fromSs] = { name, messages: [], unread: 0 };
+                // Ensure chat tab exists; skip what history already showed
+                const tab = ensureTab(fromSs);
+                if (d.msg_id) {
+                    if (tab.ids.has(d.msg_id)) return;
+                    tab.ids.add(d.msg_id);
                 }
 
                 // Build message element
@@ -1187,16 +1417,16 @@
                     const attachDiv = document.createElement('div');
                     attachDiv.innerHTML = renderAttachment(fileUrl);
                     el.appendChild(attachDiv);
-                    textDiv.textContent = '📎 ' + getFilename(fileUrl);
                 }
+                const shown = fileUrl ? '📎 ' + getFilename(fileUrl) : text;
 
                 // Store in chat
-                chatTabs[fromSs].messages.push({ html: el.outerHTML, text });
+                chatTabs[fromSs].messages.push({ html: finishedHtml(el, shown), text, msg_id: d.msg_id });
 
                 // If this chat is active, show it
                 if (activeChatId === fromSs) {
                     msgs.appendChild(el);
-                    animateText(textEl, text, scrollToBottom);
+                    animateText(textEl, shown, scrollToBottom);
                 } else {
                     chatTabs[fromSs].unread++;
                     renderChatTabs();
@@ -1226,11 +1456,7 @@
         if (!text || !target) return;
 
         // Ensure chat tab
-        if (!chatTabs[target]) {
-            const contact = allContacts.find(c => c.ss_id === target);
-            const name = contact ? contact.display_name : target;
-            chatTabs[target] = { name, messages: [], unread: 0 };
-        }
+        ensureTab(target);
         if (activeChatId !== target) {
             openChat(target);
         }
@@ -1250,7 +1476,8 @@
                 metaEl.textContent = `[${new Date().toLocaleTimeString()}] TO: ${target} | ${data.route || 'sent'}`;
 
                 // Store and display
-                chatTabs[target].messages.push({ html: el.outerHTML, text });
+                if (data.msg_id) chatTabs[target].ids.add(data.msg_id);
+                chatTabs[target].messages.push({ html: finishedHtml(el, text), text, msg_id: data.msg_id });
                 msgs.appendChild(el);
                 animateText(textEl, text, scrollToBottom);
                 document.getElementById('payload').value = '';
@@ -1324,11 +1551,7 @@
         }
 
         // Ensure chat tab
-        if (!chatTabs[target]) {
-            const contact = allContacts.find(c => c.ss_id === target);
-            const name = contact ? contact.display_name : target;
-            chatTabs[target] = { name, messages: [], unread: 0 };
-        }
+        ensureTab(target);
         if (activeChatId !== target) {
             openChat(target);
         }
@@ -1431,7 +1654,11 @@
     // ========== LOGOUT ==========
     function logout() {
         if (pingInterval) clearInterval(pingInterval);
-        if (ws) try { ws.close(); } catch(e) {}
+        if (ws) try {
+            ws.onclose = null;
+            ws.send(JSON.stringify({ type: 'bye' }));
+            ws.close(1000);
+        } catch(e) {}
         localStorage.removeItem('pager_ss_id');
         location.reload();
     }
@@ -1443,16 +1670,96 @@
         document.getElementById('my-id').textContent = `ID: ${mySsId}`;
         document.getElementById('brand-ssid').textContent = `| SS-ID: ${mySsId}`;
         initCrypto();
+        initPhonebookEvents();
         connectWS();
-        loadContacts();
+        loadContacts().then(() => {
+            if (pendingChat && pendingChat !== mySsId) openChat(pendingChat, pendingChatName);
+            pendingChat = null;
+            clearDeepLink();
+        });
         loadMeshStatus();
         setInterval(loadMeshStatus, 30000);
-        // Refresh contact statuses periodically
-        setInterval(() => {
-            if (ws && ws.readyState === WebSocket.OPEN) {
-                ws.send(JSON.stringify({ type: 'get_presence' }));
+        // Remote statuses (other nodes) come with the phone book; local ones
+        // are pushed over the socket as they change.
+        setInterval(loadContacts, 30000);
+        // A tab coming back from the background pings at once, so it doesn't
+        // stay a zombie until the next (throttled) timer tick.
+        document.addEventListener('visibilitychange', () => {
+            if (!document.hidden && ws && ws.readyState === WebSocket.OPEN) {
+                ws.send(JSON.stringify({ type: 'ping', ts: Date.now() }));
             }
-        }, 15000);
+        });
+    }
+
+    // ========== SESSION OFFER (Telegram «продолжить диалог») ==========
+    async function showSessionOffer(code) {
+        document.getElementById('reg-screen').style.display = 'none';
+        const box = document.getElementById('session-offer');
+        const text = document.getElementById('offer-text');
+        const start = document.getElementById('offer-start');
+        const stay = document.getElementById('offer-stay');
+        box.style.display = 'flex';
+        text.textContent = 'Проверяю ссылку...';
+        start.disabled = true;
+        try {
+            const res = await fetch('/session/claim', {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ code }),
+            });
+            if (!res.ok) throw new Error('expired');
+            offerClaim = await res.json();
+        } catch (e) {
+            text.innerHTML = 'Ссылка устарела. Открой последнее уведомление в Telegram<br>или продолжи с текущей сессией.';
+            start.style.display = 'none';
+            stay.style.display = '';
+            stay.textContent = mySsId ? `▶ ОТКРЫТЬ ПЕЙДЖЕР` : '⚡ ПОЛУЧИТЬ SSID';
+            return;
+        }
+        if (offerClaim.ss_id === mySsId) {   // already this person here — just open the chat
+            return acceptSessionOffer();
+        }
+        const who = escapeHtml(offerClaim.to_name || offerClaim.to || 'Кто-то');
+        const me = escapeHtml(offerClaim.display_name || offerClaim.ss_id);
+        text.innerHTML = `<b>${who}</b> написал(а) тебе в пейджер.<br><br>`
+            + `Начать новую сессию как <b>${me}</b> и продолжить диалог?`
+            + (mySsId ? `<br><small>Текущая сессия ${escapeHtml(mySsId)} на этом устройстве будет закрыта.</small>` : '');
+        start.disabled = false;
+        if (mySsId) {
+            stay.style.display = '';
+            stay.textContent = '✖ ОСТАТЬСЯ В ТЕКУЩЕЙ';
+        }
+    }
+
+    function acceptSessionOffer() {
+        const legacyKey = localStorage.getItem('pager_keypair');
+        if (legacyKey && mySsId) {
+            // The old unnamespaced key pair belongs to the session we leave.
+            localStorage.setItem('pager_keypair_' + mySsId, legacyKey);
+            localStorage.removeItem('pager_keypair');
+        }
+        mySsId = offerClaim.ss_id;
+        localStorage.setItem('pager_ss_id', mySsId);
+        pendingChat = offerClaim.to || null;
+        pendingChatName = offerClaim.to_name || '';
+        document.getElementById('session-offer').style.display = 'none';
+        initApp();
+    }
+
+    function declineSessionOffer() {
+        document.getElementById('session-offer').style.display = 'none';
+        if (!offerClaim) pendingChat = null;
+        clearDeepLink();
+        if (mySsId) initApp();
+        else showRegScreen();
+    }
+
+    function showRegScreen() {
+        if (pendingChat) {
+            const hint = document.getElementById('reg-hint');
+            hint.textContent = `После регистрации откроется чат с ${pendingChat}`;
+            hint.style.display = '';
+        }
+        document.getElementById('reg-screen').style.display = 'flex';
     }
 
     // ========== E2E ENCRYPTION ==========
@@ -1468,7 +1775,14 @@
 
     async function initCrypto() {
         try {
-            const stored = localStorage.getItem('pager_keypair');
+            const keyName = 'pager_keypair_' + mySsId;
+            let stored = localStorage.getItem(keyName);
+            if (!stored && localStorage.getItem('pager_keypair')) {
+                // Pre-namespacing key pair: it belongs to this browser's SSID.
+                stored = localStorage.getItem('pager_keypair');
+                localStorage.setItem(keyName, stored);
+                localStorage.removeItem('pager_keypair');
+            }
             if (stored) {
                 const jwk = JSON.parse(stored);
                 myKeyPair = {
@@ -1479,7 +1793,7 @@
                 myKeyPair = await crypto.subtle.generateKey({ name: 'ECDH', namedCurve: 'P-256' }, true, ['deriveBits']);
                 const priv = await crypto.subtle.exportKey('jwk', myKeyPair.privateKey);
                 const pub = await crypto.subtle.exportKey('jwk', myKeyPair.publicKey);
-                localStorage.setItem('pager_keypair', JSON.stringify({ priv, pub }));
+                localStorage.setItem(keyName, JSON.stringify({ priv, pub }));
             }
             // Publish public key as base64(SPKI DER) to match Android's format.
             const spki = await crypto.subtle.exportKey('spki', myKeyPair.publicKey);
@@ -1490,14 +1804,19 @@
         } catch (e) { myKeyPair = null; /* crypto unavailable → plaintext mode */ }
     }
 
-    async function getPeerKey(ssId) {
-        if (peerKeyCache[ssId]) return peerKeyCache[ssId];
+    // A peer's key changes when they start a session on another device (e.g.
+    // from the Telegram link), so the cache is short-lived and sending always
+    // uses the current key.
+    const PEER_KEY_TTL = 60000;
+    async function getPeerKey(ssId, fresh = false) {
+        const hit = peerKeyCache[ssId];
+        if (hit && !fresh && Date.now() - hit.at < PEER_KEY_TTL) return hit.key;
         try {
             const res = await fetch('/keys/' + encodeURIComponent(ssId));
             const data = await res.json();
             if (!data.ok || !data.pubkey) return null;
             const key = await crypto.subtle.importKey('spki', unb64(data.pubkey), { name: 'ECDH', namedCurve: 'P-256' }, true, []);
-            peerKeyCache[ssId] = key;
+            peerKeyCache[ssId] = { key, at: Date.now() };
             return key;
         } catch (e) { return null; }
     }
@@ -1510,7 +1829,12 @@
 
     async function maybeEncrypt(targetSs, plaintext) {
         if (!myKeyPair) return plaintext;
-        const peerPub = await getPeerKey(targetSs);
+        // Only while the recipient is online: their live device holds the
+        // private key and reads it now. An offline recipient will read it from
+        // the Telegram notice and likely on a new device (new key pair), where
+        // a message sealed for the old key could never be opened.
+        if ((contactStatuses[targetSs] || 'offline') !== 'online') return plaintext;
+        const peerPub = await getPeerKey(targetSs, true);
         if (!peerPub) return plaintext; // recipient has no key → send plaintext
         try {
             const aes = await deriveAesKey(peerPub);
@@ -1526,14 +1850,19 @@
 
     async function maybeDecrypt(fromSs, text) {
         if (!myKeyPair || !looksEncrypted(text)) return text;
-        try {
-            const o = JSON.parse(text);
-            const peerPub = await getPeerKey(fromSs);
-            if (!peerPub) return text;
-            const aes = await deriveAesKey(peerPub);
-            const pt = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: unb64(o.n), tagLength: 128 }, aes, unb64(o.c));
-            return new TextDecoder().decode(pt);
-        } catch (e) { return '[🔒 не удалось расшифровать]'; }
+        let o;
+        try { o = JSON.parse(text); } catch (e) { return text; }
+        for (const fresh of [false, true]) {
+            try {
+                const peerPub = await getPeerKey(fromSs, fresh);
+                if (!peerPub) break;
+                const aes = await deriveAesKey(peerPub);
+                const pt = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: unb64(o.n), tagLength: 128 }, aes, unb64(o.c));
+                return new TextDecoder().decode(pt);
+            } catch (e) { /* stale peer key → retry with a fresh one */ }
+        }
+        // Encrypted for a key this device doesn't hold (another device/session).
+        return '[🔒 зашифровано для другого устройства — не прочитать здесь]';
     }
 
     // ========== VIDEO CALLS (WebRTC) ==========
@@ -1696,8 +2025,9 @@
     }
 
     // ========== BOOT ==========
-    if (mySsId) initApp();
-    else document.getElementById('reg-screen').style.display = 'flex';
+    if (urlParams.get('login')) showSessionOffer(urlParams.get('login'));
+    else if (mySsId) initApp();
+    else showRegScreen();
 
     // ========== MATRIX RAIN ==========
     (function(){
