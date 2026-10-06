@@ -289,6 +289,8 @@ class MainActivity : AppCompatActivity() {
                         }
                         return
                     }
+                    // presence / pong frames are not messages
+                    if (obj.has("type")) return
                 } catch (_: Exception) {}
                 // Parse for unread badge update
                 try {

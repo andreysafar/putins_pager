@@ -144,6 +144,18 @@ class MeshRouter:
             self.routes.setdefault(ss_id, set()).add(via_node_id)
             self.peer_node_ids.add(via_node_id)
 
+    def set_routes_via(self, via_node_id: str, ssids: Iterable[str]) -> None:
+        """Replace everything we route through `via_node_id` with `ssids`.
+
+        A neighbour's hello is its full advert, so contacts it no longer
+        mentions must stop routing through it.
+        """
+        for via in self.routes.values():
+            via.discard(via_node_id)
+        self.routes = {ss: via for ss, via in self.routes.items() if via}
+        for ss_id in ssids:
+            self.learn_route(ss_id, via_node_id)
+
     def forget_node(self, node_id: str) -> None:
         self.peer_node_ids.discard(node_id)
         for via in self.routes.values():

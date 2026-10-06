@@ -273,6 +273,54 @@
         .status-offline { background: var(--offline); }
         .status-zombie { background: var(--zombie); box-shadow: 0 0 4px var(--zombie); }
         .status-killed { background: var(--killed); box-shadow: 0 0 4px var(--killed); }
+        /* Zombie: alive on paper, not answering — make it impossible to miss. */
+        .status-zombie { animation: zombie-pulse 1.6s ease-in-out infinite; }
+        @keyframes zombie-pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.25; } }
+
+        /* ========== PHONE BOOK (Избранное / Ближайшие ноды / Удалённые) ========== */
+        .phonebook {
+            max-height: 190px;
+            overflow-y: auto;
+            background: rgba(42,58,26,0.10);
+            border-bottom: 1px solid rgba(42,58,26,0.2);
+            font-size: 0.55rem;
+            color: var(--lcd-dark);
+        }
+        .pb-legend {
+            display: flex; gap: 10px; flex-wrap: wrap;
+            padding: 3px 8px; font-size: 0.45rem; opacity: 0.75;
+        }
+        .pb-legend span { display: inline-flex; align-items: center; gap: 3px; }
+        .pb-legend .status-indicator { display: inline-block; }
+        .pb-group > summary, .pb-node > summary {
+            list-style: none; cursor: pointer; user-select: none;
+            display: flex; align-items: center; gap: 6px;
+            padding: 4px 8px;
+        }
+        .pb-group > summary::-webkit-details-marker, .pb-node > summary::-webkit-details-marker { display: none; }
+        .pb-group > summary { font-weight: bold; letter-spacing: 1px; background: rgba(42,58,26,0.12); }
+        .pb-node > summary { padding-left: 18px; opacity: 0.9; }
+        .pb-group > summary::before, .pb-node > summary::before { content: '▸'; width: 8px; }
+        .pb-group[open] > summary::before, .pb-node[open] > summary::before { content: '▾'; }
+        .pb-counts { margin-left: auto; display: inline-flex; gap: 6px; font-weight: normal; opacity: 0.8; }
+        .pb-row {
+            display: flex; align-items: center; gap: 6px;
+            padding: 3px 8px 3px 30px; cursor: pointer;
+        }
+        .pb-group-flat .pb-row { padding-left: 18px; }
+        .pb-row:hover { background: rgba(42,58,26,0.18); }
+        .pb-row.active-chat { background: rgba(42,58,26,0.26); }
+        .pb-row.is-zombie .pb-name { font-style: italic; }
+        .pb-row.is-offline { opacity: 0.6; }
+        .pb-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .pb-meta { font-size: 0.45rem; opacity: 0.7; white-space: nowrap; }
+        .pb-star { background: none; border: none; cursor: pointer; font-size: 0.7rem; color: var(--amber); padding: 0 2px; }
+        .pb-empty { padding: 4px 30px; opacity: 0.5; font-size: 0.5rem; }
+
+        /* ========== SESSION OFFER (link from Telegram) ========== */
+        #session-offer { display: none; }
+        #session-offer .reg-subtitle b { color: var(--lcd-dark); }
+        .reg-btn.secondary { background: transparent; color: var(--lcd-dark); margin-top: 10px; }
 
         /* ========== MESSAGES AREA ========== */
         .messages-area {
@@ -733,7 +781,17 @@
     <input type="text" id="reg-name" placeholder="Твое имя (никнейм)" style="width:80%;padding:10px;margin-bottom:10px;background:#0d1a0d;border:1px solid #00ff00;color:#00ff00;font-family:monospace;text-align:center;">
     <input type="text" id="reg-display" placeholder="Отображаемое имя" style="width:80%;padding:10px;margin-bottom:15px;background:#0d1a0d;border:1px solid #00ff00;color:#00ff00;font-family:monospace;text-align:center;">
     <button class="reg-btn" onclick="registerAnon()">⚡ ПОЛУЧИТЬ SSID</button>
+    <div class="reg-subtitle" id="reg-hint" style="display:none;margin-top:14px"></div>
     <div class="reg-footer">SPORTS-PUNK EDITION 🦾⚙️</div>
+</div>
+
+<!-- ========== SESSION OFFER (link from a Telegram notification) ========== -->
+<div id="session-offer" style="flex-direction:column;align-items:center;justify-content:center;min-height:60vh;padding:20px;text-align:center">
+    <div class="reg-pager-icon">📟</div>
+    <div class="reg-title">НОВАЯ СЕССИЯ</div>
+    <div class="reg-subtitle" id="offer-text"></div>
+    <button class="reg-btn" id="offer-start" onclick="acceptSessionOffer()">▶ НАЧАТЬ СЕССИЮ</button>
+    <button class="reg-btn secondary" id="offer-stay" onclick="declineSessionOffer()" style="display:none"></button>
 </div>
 
 <!-- ========== PAGER HOUSING ========== -->
@@ -770,9 +828,9 @@
         <div class="target-row" style="background:rgba(42,58,26,0.08);">
             <span>🔍</span>
             <input type="text" id="contact-search" placeholder="Search contacts..." oninput="onContactSearch()" style="font-size:0.6rem;">
-            <button onclick="toggleShowAll()" id="btn-show-all" style="font-size:0.45rem;padding:2px 8px;background:rgba(42,58,26,0.15);border:1px solid rgba(42,58,26,0.3);border-radius:3px;color:var(--lcd-dark);cursor:pointer;font-family:'Share Tech Mono',monospace;" title="Toggle show all contacts">👁 ALL</button>
+            <button onclick="toggleShowAll()" id="btn-show-all" style="font-size:0.45rem;padding:2px 8px;background:rgba(42,58,26,0.15);border:1px solid rgba(42,58,26,0.3);border-radius:3px;color:var(--lcd-dark);cursor:pointer;font-family:'Share Tech Mono',monospace;" title="Скрыть оффлайн">👁 ALL</button>
         </div>
-        <div class="contacts-bar" id="contacts-bar">
+        <div class="phonebook" id="contacts-bar">
             <span style="font-size:0.5rem; color:rgba(42,58,26,0.4); padding:4px;">⏳ SCANNING...</span>
         </div>
 
@@ -863,8 +921,27 @@
     let pingInterval = null;
     let reconnectAttempts = 0;
     const MAX_RECONNECT_DELAY = 30000;
-    let showAllContacts = true; // show all by default, toggle to filter
+    let showAllContacts = true; // false → hide offline contacts (favourites always shown)
     let contactSearchQuery = '';
+    let phonebookData = null;      // /phonebook: favorites / nearby / remote
+    // Deep links: ?to=<ss> (the «Написать» button on iron-siberia.ru) and
+    // ?login=<code>&to=<ss> (the «продолжить диалог» link from Telegram).
+    const urlParams = new URLSearchParams(location.search);
+    let pendingChat = urlParams.get('to') || null;
+    // A chat opened from the portal («Написать» on iron-siberia.ru) may go in
+    // the clear until the athlete answers — then it is P2P-encrypted.
+    const portalChat = urlParams.get('login') ? null : pendingChat;
+    let pendingChatName = '';
+    let offerClaim = null;
+    const STATUS_LABEL = { online: 'онлайн', zombie: 'зомби — не отвечает', offline: 'оффлайн' };
+
+    function escapeHtml(s) {
+        return String(s ?? '').replace(/[&<>"']/g, ch =>
+            ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]));
+    }
+    function clearDeepLink() {
+        if (location.search) history.replaceState(null, '', location.pathname);
+    }
 
     // ========== CONTACT STATUS TRACKING ==========
     // Server tracks last_seen per WebSocket connection
@@ -908,6 +985,7 @@
             if (data.ssid || data.ss_id) {
                 mySsId = data.ssid || data.ss_id;
                 localStorage.setItem('pager_ss_id', mySsId);
+                document.getElementById('reg-screen').style.display = 'none';
                 initApp();
             }
         } catch(e) {
@@ -933,56 +1011,164 @@
         msgs.scrollTop = msgs.scrollHeight;
     }
 
-    // ========== CONTACTS ==========
+    // ========== PHONE BOOK ==========
+    // Избранное / Ближайшие ноды (эта нода + прямые соседи) / Удалённые
+    // контакты (соседи соседей). Statuses: online / zombie / offline.
     async function loadContacts() {
         const bar = document.getElementById('contacts-bar');
-        bar.innerHTML = '<span style="font-size:0.5rem; color:rgba(42,58,26,0.4); padding:4px;" class="loading">⏳ SCANNING MESH...</span>';
+        if (!phonebookData) {
+            bar.innerHTML = '<span style="font-size:0.5rem; color:rgba(42,58,26,0.4); padding:4px;" class="loading">⏳ SCANNING MESH...</span>';
+        }
         try {
-            const res = await fetch('/contacts');
-            const athletes = await res.json();
-            allContacts = athletes.map(a => ({
-                ss_id: a.ss_id,
-                display_name: (a.display_name || a.first_name || a.username || a.name || 'USER').toUpperCase(),
-                status: contactStatuses[a.ss_id] || 'offline'
-            }));
+            const res = await fetch('/phonebook?ss_id=' + encodeURIComponent(mySsId || ''));
+            phonebookData = await res.json();
+            indexPhonebook();
             renderContactsBar();
             renderChatTabs();
         } catch(e) {
-            bar.innerHTML = '<span style="font-size:0.5rem; color:var(--killed); padding:4px;">⚠ CONTACTS OFFLINE</span>';
+            if (!phonebookData) bar.innerHTML = '<span style="font-size:0.5rem; color:var(--killed); padding:4px;">⚠ CONTACTS OFFLINE</span>';
         }
+    }
+
+    function phonebookNodes() {
+        if (!phonebookData) return [];
+        return [...phonebookData.nearby.nodes, ...phonebookData.remote.nodes];
+    }
+
+    function indexPhonebook() {
+        const seen = {};
+        allContacts = [];
+        const add = c => {
+            if (seen[c.ss_id]) return;
+            seen[c.ss_id] = true;
+            contactStatuses[c.ss_id] = c.status;
+            allContacts.push({ ...c, display_name: (c.display_name || 'USER').toUpperCase() });
+        };
+        phonebookData.favorites.contacts.forEach(add);
+        phonebookNodes().forEach(n => n.contacts.forEach(add));
+        // Tabs opened before the phone book arrived (queued messages) get names.
+        for (const [ssId, tab] of Object.entries(chatTabs)) {
+            const c = allContacts.find(x => x.ss_id === ssId);
+            if (c && tab.name === ssId) tab.name = c.display_name;
+        }
+    }
+
+    function statusOf(c) { return contactStatuses[c.ss_id] || c.status || 'offline'; }
+
+    function isGroupOpen(key, dflt) {
+        try {
+            const v = localStorage.getItem('pb_open_' + key);
+            return v === null ? dflt : v === '1';
+        } catch (e) { return dflt; }
+    }
+
+    function contactVisible(c) {
+        if (contactSearchQuery) {
+            const q = contactSearchQuery.toLowerCase();
+            return (c.display_name || '').toLowerCase().includes(q)
+                || (c.ss_id || '').toLowerCase().includes(q)
+                || (c.node_id || '').toLowerCase().includes(q);
+        }
+        return showAllContacts || statusOf(c) !== 'offline' || !!chatTabs[c.ss_id];
+    }
+
+    function countsHtml(list) {
+        const n = { online: 0, zombie: 0, offline: 0 };
+        list.forEach(c => { n[statusOf(c)] = (n[statusOf(c)] || 0) + 1; });
+        return `<span class="pb-counts" title="онлайн / зомби / оффлайн">🟢${n.online} 🧟${n.zombie} ⚪${n.offline}</span>`;
+    }
+
+    function rowHtml(c) {
+        const st = statusOf(c);
+        const meta = [];
+        if (c.kind === 'athlete') meta.push('🏊 атлет');
+        if (c.hops > 1) meta.push(`${c.hops} хоп${c.hops < 5 ? 'а' : 'ов'}`);
+        if (st === 'zombie') meta.push('🧟');
+        const active = chatTabs[c.ss_id] ? 'active-chat' : '';
+        const name = (c.display_name || c.ss_id).toUpperCase();
+        return `<div class="pb-row is-${st} ${active}" data-ss="${escapeHtml(c.ss_id)}" data-name="${escapeHtml(name)}"
+                     title="${escapeHtml(c.ss_id)} · ${STATUS_LABEL[st] || st}${c.node_id ? ' · ' + escapeHtml(c.node_id) : ''}">
+            <span class="status-indicator ${getStatusClass(st)}"></span>
+            <span class="pb-name">${escapeHtml(name)}</span>
+            <span class="pb-meta">${meta.join(' · ')}</span>
+            <button class="pb-star" data-star="${escapeHtml(c.ss_id)}" title="${c.favorite ? 'Убрать из избранного' : 'В избранное'}">${c.favorite ? '★' : '☆'}</button>
+        </div>`;
+    }
+
+    function nodeHtml(n) {
+        const visible = n.contacts.filter(contactVisible);
+        if (contactSearchQuery && !visible.length) return '';
+        const key = 'node_' + n.node_id;
+        const label = n.self
+            ? `📍 ${escapeHtml(n.node_id)} · эта нода`
+            : `<span class="status-indicator ${getStatusClass(n.status)}"></span> ${escapeHtml(n.node_id)} · ${n.hops} хоп${n.hops > 1 ? 'а' : ''}${n.status === 'zombie' ? ' · 🧟 нода молчит' : ''}`;
+        const rows = visible.length ? visible.map(rowHtml).join('') : '<div class="pb-empty">никого в сети</div>';
+        const open = contactSearchQuery || isGroupOpen(key, n.self);
+        return `<details class="pb-node" data-key="${escapeHtml(key)}" ${open ? 'open' : ''}>
+            <summary>${label} ${countsHtml(n.contacts)}</summary>${rows}</details>`;
+    }
+
+    function groupHtml(key, title, inner, people, dfltOpen) {
+        const open = contactSearchQuery || isGroupOpen(key, dfltOpen);
+        return `<details class="pb-group" data-key="${key}" ${open ? 'open' : ''}>
+            <summary>${title} ${countsHtml(people)}</summary>${inner}</details>`;
     }
 
     function renderContactsBar() {
         const bar = document.getElementById('contacts-bar');
-        let visible = allContacts;
+        if (!phonebookData) return;
+        const scroll = bar.scrollTop;
+        const legend = '<div class="pb-legend"><span><i class="status-indicator status-online"></i>онлайн</span>'
+            + '<span><i class="status-indicator status-zombie"></i>зомби: висит, но не отвечает</span>'
+            + '<span><i class="status-indicator status-offline"></i>оффлайн</span></div>';
 
-        // Filter by search query
-        if (contactSearchQuery) {
-            const q = contactSearchQuery.toLowerCase();
-            visible = visible.filter(c => {
-                const name = (c.display_name || '').toLowerCase();
-                const ssid = (c.ss_id || '').toLowerCase();
-                return name.includes(q) || ssid.includes(q);
-            });
-        } else if (!showAllContacts) {
-            // Show only contacts with active chats (have messages)
-            visible = visible.filter(c => {
-                const tab = chatTabs[c.ss_id];
-                return tab && tab.messages && tab.messages.length > 0;
-            });
-        }
+        const favs = phonebookData.favorites.contacts;
+        const favRows = favs.filter(contactVisible).map(rowHtml).join('')
+            || '<div class="pb-empty">☆ — добавь контакт в избранное</div>';
+        const nearby = phonebookData.nearby.nodes;
+        const remote = phonebookData.remote.nodes;
+        const people = nodes => nodes.flatMap(n => n.contacts);
 
-        if (!visible.length) {
-            bar.innerHTML = '<span style="font-size:0.5rem; color:rgba(42,58,26,0.4); padding:4px;">NO CONTACTS</span>';
-            return;
-        }
-        bar.innerHTML = visible.map(c => {
-            const isActive = chatTabs[c.ss_id] ? 'active-chat' : '';
-            return `<div class="contact-chip ${isActive}" onclick="openChat('${c.ss_id}')" title="${c.ss_id}">
-                <span class="status-indicator ${getStatusClass(c.status)}"></span>
-                <span>${c.display_name}</span>
-            </div>`;
-        }).join('');
+        bar.innerHTML = legend
+            + groupHtml('favorites', '★ ИЗБРАННОЕ', `<div class="pb-group-flat">${favRows}</div>`, favs, true)
+            + groupHtml('nearby', '📡 БЛИЖАЙШИЕ НОДЫ', nearby.map(nodeHtml).join(''), people(nearby), true)
+            + groupHtml('remote', '🛰 УДАЛЁННЫЕ (соседи соседей)',
+                remote.map(nodeHtml).join('') || '<div class="pb-empty">соседей соседей пока не видно</div>',
+                people(remote), false);
+        bar.scrollTop = scroll;
+    }
+
+    async function toggleFavorite(ssId) {
+        const c = allContacts.find(x => x.ss_id === ssId);
+        const base = '/favorites/' + encodeURIComponent(mySsId);
+        try {
+            if (c && c.favorite) {
+                await fetch(base + '/' + encodeURIComponent(ssId), { method: 'DELETE' });
+            } else {
+                await fetch(base, {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ contact: ssId, display_name: c ? c.display_name : '' }),
+                });
+            }
+        } catch (e) {}
+        loadContacts();
+    }
+
+    function initPhonebookEvents() {
+        const bar = document.getElementById('contacts-bar');
+        bar.addEventListener('click', e => {
+            const star = e.target.closest('[data-star]');
+            if (star) { e.preventDefault(); e.stopPropagation(); toggleFavorite(star.dataset.star); return; }
+            const row = e.target.closest('.pb-row');
+            if (row) openChat(row.dataset.ss, row.dataset.name);
+        });
+        // <details> toggle does not bubble — listen in the capture phase.
+        bar.addEventListener('toggle', e => {
+            const key = e.target.dataset && e.target.dataset.key;
+            if (key && !contactSearchQuery) {
+                try { localStorage.setItem('pb_open_' + key, e.target.open ? '1' : '0'); } catch (err) {}
+            }
+        }, true);
     }
 
     function onContactSearch() {
@@ -994,21 +1180,56 @@
     function toggleShowAll() {
         showAllContacts = !showAllContacts;
         const btn = document.getElementById('btn-show-all');
-        btn.textContent = showAllContacts ? '🔒 ACTIVE' : '👁 ALL';
+        btn.textContent = showAllContacts ? '👁 ALL' : '🟢 LIVE';
         renderContactsBar();
     }
 
     // ========== CHAT TABS ==========
-    function openChat(ssId) {
-        const contact = allContacts.find(c => c.ss_id === ssId);
-        const name = contact ? contact.display_name : ssId;
+    function ensureTab(ssId, nameHint) {
         if (!chatTabs[ssId]) {
-            chatTabs[ssId] = { name, messages: [], unread: 0 };
+            const contact = allContacts.find(c => c.ss_id === ssId);
+            const name = contact ? contact.display_name : ((nameHint || '').toUpperCase() || ssId);
+            chatTabs[ssId] = { name, messages: [], unread: 0, ids: new Set(), loaded: false };
         }
+        return chatTabs[ssId];
+    }
+
+    function openChat(ssId, nameHint) {
+        const tab = ensureTab(ssId, nameHint);
         activeChatId = ssId;
+        tab.unread = 0;
         document.getElementById('target').value = ssId;
         renderChatTabs();
         renderMessages();
+        renderContactsBar();
+        if (!tab.loaded) loadHistory(ssId);
+    }
+
+    // History from the node — a session started from Telegram continues the
+    // dialog instead of opening an empty chat.
+    async function loadHistory(peer) {
+        const tab = chatTabs[peer];
+        if (!tab || tab.loaded) return;
+        tab.loaded = true;
+        try {
+            const res = await fetch(`/messages/${encodeURIComponent(mySsId)}?with=${encodeURIComponent(peer)}&limit=50`);
+            const rows = (await res.json()).reverse();
+            const older = [];
+            for (const m of rows) {
+                if (m.msg_id && tab.ids.has(m.msg_id)) continue;
+                if (m.msg_id) tab.ids.add(m.msg_id);
+                const outbound = m.from_ss === mySsId;
+                const text = await openText(m, peer);
+                const { el, metaEl, textEl } = typewriterText(text, outbound);
+                const when = m.created_at ? new Date(m.created_at).toLocaleString() : '';
+                metaEl.textContent = `[${when}] ${outbound ? 'TO: ' + peer : 'FROM: ' + peer}`;
+                textEl.textContent = text;
+                el.classList.add('typing-done');
+                older.push({ html: el.outerHTML, text, msg_id: m.msg_id });
+            }
+            tab.messages = [...older, ...tab.messages];
+            if (activeChatId === peer) renderMessages();
+        } catch (e) { tab.loaded = false; }
     }
 
     function renderChatTabs() {
@@ -1020,14 +1241,14 @@
         }
         tabsEl.innerHTML = tabIds.map(ssId => {
             const tab = chatTabs[ssId];
-            const contact = allContacts.find(c => c.ss_id === ssId);
-            const status = contact ? contact.status : 'offline';
+            const status = contactStatuses[ssId] || 'offline';
             const isActive = ssId === activeChatId ? 'active' : '';
             const badge = tab.unread > 0 ? `<span class="tab-new-badge">${tab.unread}</span>` : '';
-            return `<div class="chat-tab ${isActive}" onclick="switchTab('${ssId}')">
+            const sid = escapeHtml(JSON.stringify(ssId));
+            return `<div class="chat-tab ${isActive}" onclick="switchTab(${sid})">
                 <span class="tab-status" style="background:${getStatusColor(status)}"></span>
-                ${tab.name}${badge}
-                <span class="tab-close" onclick="event.stopPropagation();closeTab('${ssId}')">×</span>
+                ${escapeHtml(tab.name)}${badge}
+                <span class="tab-close" onclick="event.stopPropagation();closeTab(${sid})">×</span>
             </div>`;
         }).join('');
     }
@@ -1064,7 +1285,7 @@
         }
         const chat = chatTabs[activeChatId];
         if (!chat.messages.length) {
-            msgs.innerHTML = `<div class="empty-chat"><div class="pager-icon">📟</div><div>Нет сообщений с ${chat.name}</div></div>`;
+            msgs.innerHTML = `<div class="empty-chat"><div class="pager-icon">📟</div><div>Нет сообщений с ${escapeHtml(chat.name)}</div></div>`;
             return;
         }
         msgs.innerHTML = chat.messages.map(m => m.html).join('');
@@ -1082,6 +1303,16 @@
         div.appendChild(metaDiv);
         div.appendChild(textDiv);
         return { el: div, metaEl: metaDiv, textEl: textDiv };
+    }
+
+    // The bubble as it looks once typed — what a chat tab keeps. Storing the
+    // element before the typewriter ran kept an empty bubble for every message
+    // that arrived in a chat that wasn't open.
+    function finishedHtml(el, text) {
+        const copy = el.cloneNode(true);
+        copy.querySelector('.msg-text').textContent = text;
+        copy.classList.add('typing-done');
+        return copy.outerHTML;
     }
 
     function animateText(el, text, callback) {
@@ -1123,7 +1354,7 @@
     }
 
     function connectWS() {
-        if (ws) { try { ws.close(); } catch(e) {} }
+        if (ws) { try { ws.onclose = null; ws.close(1000); } catch(e) {} }
         updateWsStatus('reconnecting');
 
         const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
@@ -1138,6 +1369,7 @@
                     ws.send(JSON.stringify({ type: 'ping', ts: Date.now() }));
                 }
             }, 10000);
+            ws.send(JSON.stringify({ type: 'get_presence' }));
             // Refresh contacts on reconnect
             loadContacts();
             loadMeshStatus();
@@ -1147,7 +1379,8 @@
             try {
                 const d = JSON.parse(e.data);
 
-                // Handle presence updates from server
+                if (d.type === 'pong') return;
+                // Handle presence updates from server (only what changed)
                 if (d.type === 'presence') {
                     d.contacts.forEach(c => {
                         contactStatuses[c.ss_id] = c.status;
@@ -1163,23 +1396,25 @@
                     return;
                 }
 
-                // Regular message
-                const fromSs = d.from_ss || 'UNKNOWN';
-                lampFlash();
-                // Decrypt (if E2E envelope) before rendering, then continue.
+                // A message to me, or (type "sent") one my other tab/device sent.
+                const outbound = d.type === 'sent';
+                const peer = outbound ? d.to_ss : (d.from_ss || 'UNKNOWN');
+                if (!outbound) lampFlash();
                 (async () => {
-                const text = await maybeDecrypt(fromSs, d.text || '');
-
-                // Ensure chat tab exists
-                if (!chatTabs[fromSs]) {
-                    const contact = allContacts.find(c => c.ss_id === fromSs);
-                    const name = contact ? contact.display_name : fromSs;
-                    chatTabs[fromSs] = { name, messages: [], unread: 0 };
+                // Ensure chat tab exists; skip what this tab already shows
+                const tab = ensureTab(peer);
+                if (d.msg_id) {
+                    if (tab.ids.has(d.msg_id)) return;
+                    tab.ids.add(d.msg_id);
                 }
+                if (!outbound) tab.portal = false;  // the athlete answered → encrypt from now on
+                const text = await openText(d, peer);
 
                 // Build message element
-                const { el, metaEl, textEl } = typewriterText(text, false);
-                metaEl.textContent = `[${new Date().toLocaleTimeString()}] FROM: ${fromSs}`;
+                const { el, metaEl, textEl } = typewriterText(text, outbound);
+                metaEl.textContent = outbound
+                    ? `[${new Date().toLocaleTimeString()}] TO: ${peer} | из другой вкладки`
+                    : `[${new Date().toLocaleTimeString()}] FROM: ${peer}`;
 
                 // Check if message text is a file URL — render preview/download
                 const fileUrl = (text && text.startsWith('/uploads/')) ? text : null;
@@ -1187,18 +1422,18 @@
                     const attachDiv = document.createElement('div');
                     attachDiv.innerHTML = renderAttachment(fileUrl);
                     el.appendChild(attachDiv);
-                    textDiv.textContent = '📎 ' + getFilename(fileUrl);
                 }
+                const shown = fileUrl ? '📎 ' + getFilename(fileUrl) : text;
 
                 // Store in chat
-                chatTabs[fromSs].messages.push({ html: el.outerHTML, text });
+                tab.messages.push({ html: finishedHtml(el, shown), text, msg_id: d.msg_id });
 
                 // If this chat is active, show it
-                if (activeChatId === fromSs) {
+                if (activeChatId === peer) {
                     msgs.appendChild(el);
-                    animateText(textEl, text, scrollToBottom);
-                } else {
-                    chatTabs[fromSs].unread++;
+                    animateText(textEl, shown, scrollToBottom);
+                } else if (!outbound) {
+                    tab.unread++;
                     renderChatTabs();
                 }
                 })();
@@ -1226,23 +1461,24 @@
         if (!text || !target) return;
 
         // Ensure chat tab
-        if (!chatTabs[target]) {
-            const contact = allContacts.find(c => c.ss_id === target);
-            const name = contact ? contact.display_name : target;
-            chatTabs[target] = { name, messages: [], unread: 0 };
-        }
+        ensureTab(target);
         if (activeChatId !== target) {
             openChat(target);
         }
 
         try {
-            // Encrypt for the wire if the recipient published a key; the local
-            // echo below still shows the plaintext we just typed.
-            const wireText = await maybeEncrypt(target, text);
+            // P2P-encrypt when the recipient has a key (portal chats: in the
+            // clear until answered). The id is ours, so the echo of this message
+            // to the session's other tabs is recognised, and the plaintext is
+            // remembered on this device — all tabs show it, whatever keys change.
+            const msgId = newMsgId();
+            chatTabs[target].ids.add(msgId);
+            plainPut(msgId, text);
+            const wireText = await maybeEncrypt(target, text, { portal: !!chatTabs[target].portal });
             const res = await fetch('/message', {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({ text: wireText, target, from_ss: mySsId })
+                body: JSON.stringify({ text: wireText, target, from_ss: mySsId, msg_id: msgId })
             });
             if (res.ok) {
                 const data = await res.json();
@@ -1250,7 +1486,7 @@
                 metaEl.textContent = `[${new Date().toLocaleTimeString()}] TO: ${target} | ${data.route || 'sent'}`;
 
                 // Store and display
-                chatTabs[target].messages.push({ html: el.outerHTML, text });
+                chatTabs[target].messages.push({ html: finishedHtml(el, text), text, msg_id: msgId });
                 msgs.appendChild(el);
                 animateText(textEl, text, scrollToBottom);
                 document.getElementById('payload').value = '';
@@ -1324,11 +1560,7 @@
         }
 
         // Ensure chat tab
-        if (!chatTabs[target]) {
-            const contact = allContacts.find(c => c.ss_id === target);
-            const name = contact ? contact.display_name : target;
-            chatTabs[target] = { name, messages: [], unread: 0 };
-        }
+        ensureTab(target);
         if (activeChatId !== target) {
             openChat(target);
         }
@@ -1370,7 +1602,9 @@
 
             const msgHtml = div.outerHTML;
             const msgText = fileUrl ? fileUrl : `[FILE: ${originalName}]`;
-            chatTabs[target].messages.push({ html: msgHtml, text: msgText });
+            const msgId = newMsgId();
+            chatTabs[target].ids.add(msgId);
+            chatTabs[target].messages.push({ html: msgHtml, text: msgText, msg_id: msgId });
 
             if (activeChatId === target) {
                 msgs.appendChild(div);
@@ -1384,7 +1618,8 @@
                 body: JSON.stringify({
                     text: fileUrl || `[FILE: ${originalName}, ${(file.size/1024).toFixed(1)}KB]`,
                     target,
-                    from_ss: mySsId
+                    from_ss: mySsId,
+                    msg_id: msgId
                 })
             }).catch(() => {});
         }
@@ -1431,7 +1666,11 @@
     // ========== LOGOUT ==========
     function logout() {
         if (pingInterval) clearInterval(pingInterval);
-        if (ws) try { ws.close(); } catch(e) {}
+        if (ws) try {
+            ws.onclose = null;
+            ws.send(JSON.stringify({ type: 'bye' }));
+            ws.close(1000);
+        } catch(e) {}
         localStorage.removeItem('pager_ss_id');
         location.reload();
     }
@@ -1443,16 +1682,99 @@
         document.getElementById('my-id').textContent = `ID: ${mySsId}`;
         document.getElementById('brand-ssid').textContent = `| SS-ID: ${mySsId}`;
         initCrypto();
+        initPhonebookEvents();
         connectWS();
-        loadContacts();
+        loadContacts().then(() => {
+            if (pendingChat && pendingChat !== mySsId) {
+                openChat(pendingChat, pendingChatName);
+                if (pendingChat === portalChat) chatTabs[pendingChat].portal = true;
+            }
+            pendingChat = null;
+            clearDeepLink();
+        });
         loadMeshStatus();
         setInterval(loadMeshStatus, 30000);
-        // Refresh contact statuses periodically
-        setInterval(() => {
-            if (ws && ws.readyState === WebSocket.OPEN) {
-                ws.send(JSON.stringify({ type: 'get_presence' }));
+        // Remote statuses (other nodes) come with the phone book; local ones
+        // are pushed over the socket as they change.
+        setInterval(loadContacts, 30000);
+        // A tab coming back from the background pings at once, so it doesn't
+        // stay a zombie until the next (throttled) timer tick.
+        document.addEventListener('visibilitychange', () => {
+            if (!document.hidden && ws && ws.readyState === WebSocket.OPEN) {
+                ws.send(JSON.stringify({ type: 'ping', ts: Date.now() }));
             }
-        }, 15000);
+        });
+    }
+
+    // ========== SESSION OFFER (Telegram «продолжить диалог») ==========
+    async function showSessionOffer(code) {
+        document.getElementById('reg-screen').style.display = 'none';
+        const box = document.getElementById('session-offer');
+        const text = document.getElementById('offer-text');
+        const start = document.getElementById('offer-start');
+        const stay = document.getElementById('offer-stay');
+        box.style.display = 'flex';
+        text.textContent = 'Проверяю ссылку...';
+        start.disabled = true;
+        try {
+            const res = await fetch('/session/claim', {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ code }),
+            });
+            if (!res.ok) throw new Error('expired');
+            offerClaim = await res.json();
+        } catch (e) {
+            text.innerHTML = 'Ссылка устарела. Открой последнее уведомление в Telegram<br>или продолжи с текущей сессией.';
+            start.style.display = 'none';
+            stay.style.display = '';
+            stay.textContent = mySsId ? `▶ ОТКРЫТЬ ПЕЙДЖЕР` : '⚡ ПОЛУЧИТЬ SSID';
+            return;
+        }
+        if (offerClaim.ss_id === mySsId) {   // already this person here — just open the chat
+            return acceptSessionOffer();
+        }
+        const who = escapeHtml(offerClaim.to_name || offerClaim.to || 'Кто-то');
+        const me = escapeHtml(offerClaim.display_name || offerClaim.ss_id);
+        text.innerHTML = `<b>${who}</b> написал(а) тебе в пейджер.<br><br>`
+            + `Начать новую сессию как <b>${me}</b> и продолжить диалог?`
+            + (mySsId ? `<br><small>Текущая сессия ${escapeHtml(mySsId)} на этом устройстве будет закрыта.</small>` : '');
+        start.disabled = false;
+        if (mySsId) {
+            stay.style.display = '';
+            stay.textContent = '✖ ОСТАТЬСЯ В ТЕКУЩЕЙ';
+        }
+    }
+
+    function acceptSessionOffer() {
+        const legacyKey = localStorage.getItem('pager_keypair');
+        if (legacyKey && mySsId) {
+            // The old unnamespaced key pair belongs to the session we leave.
+            localStorage.setItem('pager_keypair_' + mySsId, legacyKey);
+            localStorage.removeItem('pager_keypair');
+        }
+        mySsId = offerClaim.ss_id;
+        localStorage.setItem('pager_ss_id', mySsId);
+        pendingChat = offerClaim.to || null;
+        pendingChatName = offerClaim.to_name || '';
+        document.getElementById('session-offer').style.display = 'none';
+        initApp();
+    }
+
+    function declineSessionOffer() {
+        document.getElementById('session-offer').style.display = 'none';
+        if (!offerClaim) pendingChat = null;
+        clearDeepLink();
+        if (mySsId) initApp();
+        else showRegScreen();
+    }
+
+    function showRegScreen() {
+        if (pendingChat) {
+            const hint = document.getElementById('reg-hint');
+            hint.textContent = `После регистрации откроется чат с ${pendingChat}`;
+            hint.style.display = '';
+        }
+        document.getElementById('reg-screen').style.display = 'flex';
     }
 
     // ========== E2E ENCRYPTION ==========
@@ -1460,45 +1782,109 @@
     // public keys, SHA-256(shared secret) → AES key, GCM with 128-bit tag).
     // Transparent: only encrypts when the recipient has a published key; always
     // falls back to plaintext so messaging never breaks.
+    // Envelope: {enc:1, n, c, s, r} — s/r are the sender's and recipient's
+    // public keys (base64 SPKI) it was sealed with, so either side can open it
+    // later even after the other side moved to a new device/key.
     let myKeyPair = null;
-    const peerKeyCache = {}; // ss_id -> CryptoKey (public)
+    let myPubB64 = '';
+    const peerKeyCache = {}; // ss_id -> {key, b64, at}
+    const ECDH = { name: 'ECDH', namedCurve: 'P-256' };
+    const LOCKED_IN = '[🔒 зашифровано для другого устройства — не прочитать здесь]';
+    const LOCKED_OUT = '[🔒 отправлено с другого устройства — текста здесь нет]';
 
     function b64(buf) { return btoa(String.fromCharCode(...new Uint8Array(buf))); }
     function unb64(s) { return Uint8Array.from(atob(s), c => c.charCodeAt(0)); }
+    function newMsgId() {
+        return Array.from(crypto.getRandomValues(new Uint8Array(16)), b => b.toString(16).padStart(2, '0')).join('');
+    }
+    function keyName() { return 'pager_keypair_' + mySsId; }
+
+    async function importKeyPair(stored) {
+        const jwk = JSON.parse(stored);
+        const pair = {
+            privateKey: await crypto.subtle.importKey('jwk', jwk.priv, ECDH, true, ['deriveBits']),
+            publicKey: await crypto.subtle.importKey('jwk', jwk.pub, ECDH, true, []),
+        };
+        return { pair, pub: b64(await crypto.subtle.exportKey('spki', pair.publicKey)) };
+    }
+
+    async function useKeyPair(stored) {
+        const { pair, pub } = await importKeyPair(stored);
+        myKeyPair = pair;
+        myPubB64 = pub;
+    }
 
     async function initCrypto() {
         try {
-            const stored = localStorage.getItem('pager_keypair');
-            if (stored) {
-                const jwk = JSON.parse(stored);
-                myKeyPair = {
-                    privateKey: await crypto.subtle.importKey('jwk', jwk.priv, { name: 'ECDH', namedCurve: 'P-256' }, true, ['deriveBits']),
-                    publicKey: await crypto.subtle.importKey('jwk', jwk.pub, { name: 'ECDH', namedCurve: 'P-256' }, true, []),
-                };
-            } else {
-                myKeyPair = await crypto.subtle.generateKey({ name: 'ECDH', namedCurve: 'P-256' }, true, ['deriveBits']);
-                const priv = await crypto.subtle.exportKey('jwk', myKeyPair.privateKey);
-                const pub = await crypto.subtle.exportKey('jwk', myKeyPair.publicKey);
-                localStorage.setItem('pager_keypair', JSON.stringify({ priv, pub }));
+            let stored = localStorage.getItem(keyName());
+            if (!stored && localStorage.getItem('pager_keypair')) {
+                // Pre-namespacing key pair: it belongs to this browser's SSID.
+                stored = localStorage.getItem('pager_keypair');
+                localStorage.setItem(keyName(), stored);
+                localStorage.removeItem('pager_keypair');
             }
-            // Publish public key as base64(SPKI DER) to match Android's format.
-            const spki = await crypto.subtle.exportKey('spki', myKeyPair.publicKey);
+            if (!stored) {
+                const pair = await crypto.subtle.generateKey(ECDH, true, ['deriveBits']);
+                const priv = await crypto.subtle.exportKey('jwk', pair.privateKey);
+                const pub = await crypto.subtle.exportKey('jwk', pair.publicKey);
+                // Two tabs of a new session start together: the first key wins,
+                // or each tab would hold a different one and miss messages.
+                stored = localStorage.getItem(keyName()) || JSON.stringify({ priv, pub });
+                localStorage.setItem(keyName(), stored);
+            }
+            await useKeyPair(stored);
             await fetch('/keys', {
                 method: 'POST', headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ ss_id: mySsId, pubkey: b64(spki) }),
+                body: JSON.stringify({ ss_id: mySsId, pubkey: myPubB64 }),
             });
         } catch (e) { myKeyPair = null; /* crypto unavailable → plaintext mode */ }
     }
 
-    async function getPeerKey(ssId) {
-        if (peerKeyCache[ssId]) return peerKeyCache[ssId];
+    // Tabs of one session share the key pair and the plaintext memory.
+    window.addEventListener('storage', e => {
+        if (!mySsId) return;
+        if (e.key === keyName() && e.newValue) useKeyPair(e.newValue).catch(() => {});
+        if (e.key === plainKey()) plainMem = null;
+    });
+
+    // ----- plaintext memory: every message this device sent or opened -----
+    const PLAIN_MAX = 3000;
+    let plainMem = null;
+    function plainKey() { return 'pager_plain_' + mySsId; }
+    function plainLoad() {
+        if (plainMem === null) {
+            try { plainMem = JSON.parse(localStorage.getItem(plainKey()) || '{}'); }
+            catch (e) { plainMem = {}; }
+        }
+        return plainMem;
+    }
+    function plainGet(id) {
+        const m = plainLoad();
+        return id && Object.prototype.hasOwnProperty.call(m, id) ? m[id] : null;
+    }
+    function plainPut(id, text) {
+        if (!id) return;
+        const m = plainLoad();
+        m[id] = text;
+        const ids = Object.keys(m);
+        for (const old of ids.slice(0, Math.max(0, ids.length - PLAIN_MAX))) delete m[old];
+        try { localStorage.setItem(plainKey(), JSON.stringify(m)); } catch (e) {}
+    }
+
+    // A peer's key changes when they start a session on another device (e.g.
+    // from the Telegram link), so the cache is short-lived and sending always
+    // uses the current key.
+    const PEER_KEY_TTL = 60000;
+    async function getPeerKey(ssId, fresh = false) {
+        const hit = peerKeyCache[ssId];
+        if (hit && !fresh && Date.now() - hit.at < PEER_KEY_TTL) return hit;
         try {
             const res = await fetch('/keys/' + encodeURIComponent(ssId));
             const data = await res.json();
             if (!data.ok || !data.pubkey) return null;
-            const key = await crypto.subtle.importKey('spki', unb64(data.pubkey), { name: 'ECDH', namedCurve: 'P-256' }, true, []);
-            peerKeyCache[ssId] = key;
-            return key;
+            const key = await crypto.subtle.importKey('spki', unb64(data.pubkey), ECDH, true, []);
+            peerKeyCache[ssId] = { key, b64: data.pubkey, at: Date.now() };
+            return peerKeyCache[ssId];
         } catch (e) { return null; }
     }
 
@@ -1508,15 +1894,18 @@
         return crypto.subtle.importKey('raw', hash, { name: 'AES-GCM' }, false, ['encrypt', 'decrypt']);
     }
 
-    async function maybeEncrypt(targetSs, plaintext) {
-        if (!myKeyPair) return plaintext;
-        const peerPub = await getPeerKey(targetSs);
-        if (!peerPub) return plaintext; // recipient has no key → send plaintext
+    // P2P first: encrypt whenever the recipient has published a key. Only a
+    // portal chat (opened from iron-siberia.ru, not answered yet) goes in the
+    // clear, so the athlete can read it in the Telegram notice.
+    async function maybeEncrypt(targetSs, plaintext, { portal = false } = {}) {
+        if (!myKeyPair || portal) return plaintext;
+        const peer = await getPeerKey(targetSs, true);
+        if (!peer) return plaintext; // recipient has no key → send plaintext
         try {
-            const aes = await deriveAesKey(peerPub);
+            const aes = await deriveAesKey(peer.key);
             const nonce = crypto.getRandomValues(new Uint8Array(12));
             const ct = await crypto.subtle.encrypt({ name: 'AES-GCM', iv: nonce, tagLength: 128 }, aes, new TextEncoder().encode(plaintext));
-            return JSON.stringify({ enc: 1, n: b64(nonce), c: b64(ct) });
+            return JSON.stringify({ enc: 1, n: b64(nonce), c: b64(ct), s: myPubB64, r: peer.b64 });
         } catch (e) { return plaintext; }
     }
 
@@ -1524,16 +1913,42 @@
         return typeof text === 'string' && text.startsWith('{') && text.includes('"enc"');
     }
 
-    async function maybeDecrypt(fromSs, text) {
-        if (!myKeyPair || !looksEncrypted(text)) return text;
-        try {
-            const o = JSON.parse(text);
-            const peerPub = await getPeerKey(fromSs);
-            if (!peerPub) return text;
-            const aes = await deriveAesKey(peerPub);
-            const pt = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: unb64(o.n), tagLength: 128 }, aes, unb64(o.c));
-            return new TextDecoder().decode(pt);
-        } catch (e) { return '[🔒 не удалось расшифровать]'; }
+    // Plaintext of message {msg_id, from_ss, text} in the chat with `peer`.
+    async function openText(m, peer) {
+        const known = plainGet(m.msg_id);
+        if (known !== null) return known;
+        const text = m.text || '';
+        if (!looksEncrypted(text)) return text;
+        const outbound = m.from_ss === mySsId;
+        const pt = await decryptEnvelope(text, outbound, peer);
+        if (pt === null) return outbound ? LOCKED_OUT : LOCKED_IN;
+        plainPut(m.msg_id, pt);
+        return pt;
+    }
+
+    async function decryptEnvelope(text, outbound, peer) {
+        if (!myKeyPair) return null;
+        let o;
+        try { o = JSON.parse(text); } catch (e) { return null; }
+        // My side of the envelope must be this device's key, else it's sealed
+        // for another device of mine.
+        const mine = outbound ? o.s : o.r;
+        if (mine && mine !== myPubB64) return null;
+        const theirs = outbound ? o.r : o.s;
+        const candidates = theirs
+            ? [async () => crypto.subtle.importKey('spki', unb64(theirs), ECDH, true, [])]
+            // Old envelopes without keys: the peer's current key, cached then fresh.
+            : [async () => (await getPeerKey(peer))?.key, async () => (await getPeerKey(peer, true))?.key];
+        for (const getKey of candidates) {
+            try {
+                const otherPub = await getKey();
+                if (!otherPub) continue;
+                const aes = await deriveAesKey(otherPub);
+                const pt = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: unb64(o.n), tagLength: 128 }, aes, unb64(o.c));
+                return new TextDecoder().decode(pt);
+            } catch (e) { /* try the next key */ }
+        }
+        return null;
     }
 
     // ========== VIDEO CALLS (WebRTC) ==========
@@ -1696,8 +2111,9 @@
     }
 
     // ========== BOOT ==========
-    if (mySsId) initApp();
-    else document.getElementById('reg-screen').style.display = 'flex';
+    if (urlParams.get('login')) showSessionOffer(urlParams.get('login'));
+    else if (mySsId) initApp();
+    else showRegScreen();
 
     // ========== MATRIX RAIN ==========
     (function(){
