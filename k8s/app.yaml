@@ -56,8 +56,10 @@ spec:
               value: node-alpha
             - name: MESH_PEERS
               value: '["http://10.0.0.2:9009","http://10.0.0.3:9009"]'
+            # the bot runs in the cluster since 2026-10-25; via nejry.safargaleev.com
+            # the call went rack -> TH -> back to the rack
             - name: NEZHRI_NOTIFY_URL
-              value: https://nejry.safargaleev.com/api/pager/notify
+              value: http://nezhri-bot.prod.svc.cluster.local/api/pager/notify
             - name: NODE_URL
               value: https://pager.iron-siberia.ru
             - name: PUBLIC_URL
