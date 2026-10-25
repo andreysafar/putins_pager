@@ -1,0 +1,7 @@
+include:
+  - project: neurorancho/project1
+    ref: main
+    file: ci/service.gitlab-ci.yml
+
+variables:
+  BUILD_CONTEXT: backend

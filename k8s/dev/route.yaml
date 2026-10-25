@@ -1,0 +1,13 @@
+# dev: internal name only
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: putins-pager
+spec:
+  entryPoints: ["web"]
+  routes:
+    - match: Host(`pager.k3s.lan`)
+      kind: Rule
+      services:
+        - name: putins-pager
+          port: 80

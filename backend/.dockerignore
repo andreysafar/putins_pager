@@ -1,0 +1,7 @@
+.env
+.venv
+__pycache__
+pager.db
+uploads
+server.log
+test_*.py

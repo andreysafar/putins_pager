@@ -1,0 +1,106 @@
+# putins-pager: FastAPI + WebSocket pager. State on the volume: pager.db (SQLite,
+# opened relative to the working directory /data) and uploads/ (mounted where the
+# code expects it, /app/uploads). Mongo (nezhri) is read-only: athlete directory.
+# Secret putins-pager (MONGODB_URI, NEZHRI_NOTIFY_API_KEY) is created by an admin;
+# APP_SECRET and MESH_SECRET from the EU .env are not read by the code.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: putins-pager-data
+spec:
+  accessModes: ["ReadWriteOnce"]
+  storageClassName: local-path
+  resources:
+    requests:
+      storage: 1Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: putins-pager
+spec:
+  replicas: 1
+  # SQLite on an RWO volume: never two pods
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: putins-pager
+  template:
+    metadata:
+      labels:
+        app: putins-pager
+    spec:
+      enableServiceLinks: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
+      # node with a data disk; d0a905 already keeps Mongo and Overpass
+      nodeSelector:
+        kubernetes.io/hostname: k3s-f3d010
+      containers:
+        - name: app
+          image: __IMAGE__
+          workingDir: /data
+          ports:
+            - containerPort: 9009
+          env:
+            - name: PORT
+              value: "9009"
+            - name: CORS_ORIGINS
+              value: https://your-domain.example
+            - name: MESSAGE_TTL_DEFAULT
+              value: "86400"
+            - name: NODE_ID
+              value: node-alpha
+            - name: MESH_PEERS
+              value: '["http://10.0.0.2:9009","http://10.0.0.3:9009"]'
+            - name: NEZHRI_NOTIFY_URL
+              value: https://nejry.safargaleev.com/api/pager/notify
+            - name: NODE_URL
+              value: https://pager.iron-siberia.ru
+            - name: PUBLIC_URL
+              value: https://pager.iron-siberia.ru
+          envFrom:
+            - secretRef:
+                name: putins-pager
+                optional: true
+          volumeMounts:
+            - name: data
+              mountPath: /data
+            - name: data
+              mountPath: /app/uploads
+              subPath: uploads
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 9009
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 9009
+            initialDelaySeconds: 20
+            periodSeconds: 30
+          resources:
+            requests:
+              cpu: 20m
+              memory: 64Mi
+            limits:
+              memory: 256Mi
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: putins-pager-data
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: putins-pager
+spec:
+  selector:
+    app: putins-pager
+  ports:
+    - port: 80
+      targetPort: 9009

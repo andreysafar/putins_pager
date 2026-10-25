@@ -1,0 +1,16 @@
+# prod: origin for the nginx front on EU (pager.iron-siberia.ru, pager.iron-siber.ru).
+# WebSocket (/ws/...) passes through; websecure has no read timeout.
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: putins-pager
+spec:
+  entryPoints: ["websecure"]
+  routes:
+    - match: Host(`pager.irina-dc.safargaleev.com`)
+      kind: Rule
+      services:
+        - name: putins-pager
+          port: 80
+  tls:
+    certResolver: le
