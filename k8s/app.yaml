@@ -36,9 +36,8 @@ spec:
         runAsNonRoot: true
         runAsUser: 1000
         fsGroup: 1000
-      # node with a data disk; d0a905 already keeps Mongo and Overpass
-      nodeSelector:
-        kubernetes.io/hostname: k3s-f3d010
+      # No node pin: any healthy worker (k3s-f3d010 died 2026-11-16; the pin
+      # kept this Pending until someone hand-made the -hot deployment).
       containers:
         - name: app
           image: __IMAGE__
@@ -49,13 +48,11 @@ spec:
             - name: PORT
               value: "9009"
             - name: CORS_ORIGINS
-              value: https://your-domain.example
+              value: https://pager.iron-siberia.ru
             - name: MESSAGE_TTL_DEFAULT
               value: "86400"
             - name: NODE_ID
               value: node-alpha
-            - name: MESH_PEERS
-              value: '["http://10.0.0.2:9009","http://10.0.0.3:9009"]'
             # the bot runs in the cluster since 2026-10-25; via nejry.safargaleev.com
             # the call went rack -> TH -> back to the rack
             - name: NEZHRI_NOTIFY_URL
